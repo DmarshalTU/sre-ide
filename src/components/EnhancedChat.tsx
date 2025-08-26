@@ -48,7 +48,7 @@ export function EnhancedChat({
   }, [messages])
 
   useEffect(() => {
-    // Update token stats when messages change
+    // Update token stats when messages change or when switching agents
     if (messages.length > 0) {
       try {
         const stats = NDJSONOptimizer.getTokenSummary(messages)
@@ -57,13 +57,21 @@ export function EnhancedChat({
           ...stats,
           optimization: conversationOptimization.stats
         })
+        
+        // Log conversation optimization stats
+        if (conversationOptimization.stats.savingsPercent > 0) {
+          onDebugInfo?.(`Conversation optimization: ${conversationOptimization.stats.savingsPercent}% savings available`)
+        }
       } catch (error) {
         console.error('Error updating token stats:', error)
         // Don't crash the app, just skip token stats
         setTokenStats(null)
       }
+    } else {
+      // Clear token stats when no messages
+      setTokenStats(null)
     }
-  }, [messages])
+  }, [messages, selectedAgent?.name]) // Also recalculate when agent changes
 
   const handleInputChange = (value: string) => {
     setInputMessage(value)
@@ -110,12 +118,16 @@ export function EnhancedChat({
     // Optimize message with error handling
     try {
       const optimized = NDJSONOptimizer.optimizeMessage(messageToSend)
-      onDebugInfo?.(`Token optimization: Saved ${optimized.stats.saved} tokens (${optimized.stats.savingsPercent}%)`)
+      if (optimized.stats.savingsPercent > 0) {
+        onDebugInfo?.(`Message optimization: Saved ${optimized.stats.saved} tokens (${optimized.stats.savingsPercent}%)`)
+      } else {
+        onDebugInfo?.(`Message optimization: No optimization needed for short message`)
+      }
       messageToSend = optimized.optimized
     } catch (error) {
       console.error('Error optimizing message:', error)
       // Continue with original message if optimization fails
-      onDebugInfo?.(`Token optimization: Skipped due to error`)
+      onDebugInfo?.(`Message optimization: Skipped due to error`)
     }
     
     try {

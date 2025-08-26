@@ -34,6 +34,20 @@ export class NDJSONOptimizer {
     const techniques: string[] = []
     let optimized = message
 
+    // 0. Skip optimization for very short messages
+    if (message.length < 20) {
+      return {
+        optimized: message,
+        stats: {
+          original: this.countTokens(message),
+          optimized: this.countTokens(message),
+          saved: 0,
+          savingsPercent: 0
+        },
+        techniques: ['Message too short to optimize']
+      }
+    }
+
     // 1. Remove excessive whitespace
     const whitespaceReduced = optimized.replace(/\s+/g, ' ').trim()
     if (whitespaceReduced.length < optimized.length) {

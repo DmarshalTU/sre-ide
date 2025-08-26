@@ -412,53 +412,70 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
     }
 
     // Analyze assistant messages for findings and insights
+    const processedContent = new Set() // Track processed content to avoid duplicates
+    
     messagesToUse.forEach((message: any) => {
       if (message.role === 'assistant' && message.content) {
-        const content = message.content.toLowerCase()
+        // Clean and split content into sentences
+        const sentences = message.content
+          .split(/[.!?]+/)
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 20 && s.length < 500) // Filter out very short or very long sentences
         
-        // Look for findings (issues, problems, errors)
-        if (content.includes('error') || content.includes('issue') || content.includes('problem') || 
-            content.includes('failed') || content.includes('broken') || content.includes('down')) {
-          const sentences = message.content.split(/[.!?]+/).filter((s: string) => s.trim().length > 10)
-          sentences.forEach((sentence: string) => {
-            if (sentence.toLowerCase().includes('error') || sentence.toLowerCase().includes('issue') || 
-                sentence.toLowerCase().includes('problem') || sentence.toLowerCase().includes('failed')) {
-              findings.push(sentence.trim())
-            }
-          })
-        }
-        
-        // Look for insights (analysis, observations)
-        if (content.includes('analysis') || content.includes('observe') || content.includes('found') || 
-            content.includes('detected') || content.includes('identified') || content.includes('shows')) {
-          const sentences = message.content.split(/[.!?]+/).filter((s: string) => s.trim().length > 10)
-          sentences.forEach((sentence: string) => {
-            if (sentence.toLowerCase().includes('analysis') || sentence.toLowerCase().includes('observe') || 
-                sentence.toLowerCase().includes('found') || sentence.toLowerCase().includes('detected')) {
-              insights.push(sentence.trim())
-            }
-          })
-        }
-        
-        // Look for recommendations (suggestions, actions)
-        if (content.includes('recommend') || content.includes('suggest') || content.includes('should') || 
-            content.includes('action') || content.includes('fix') || content.includes('resolve')) {
-          const sentences = message.content.split(/[.!?]+/).filter((s: string) => s.trim().length > 10)
-          sentences.forEach((sentence: string) => {
-            if (sentence.toLowerCase().includes('recommend') || sentence.toLowerCase().includes('suggest') || 
-                sentence.toLowerCase().includes('should') || sentence.toLowerCase().includes('action')) {
-              recommendations.push(sentence.trim())
-            }
-          })
-        }
+        sentences.forEach((sentence: string) => {
+          const cleanSentence = sentence.trim()
+          if (cleanSentence.length === 0 || processedContent.has(cleanSentence)) return
+          
+          const sentenceLower = cleanSentence.toLowerCase()
+          
+          // Look for findings (issues, problems, errors) - prioritize these
+          if (sentenceLower.includes('error') || sentenceLower.includes('issue') || sentenceLower.includes('problem') || 
+              sentenceLower.includes('failed') || sentenceLower.includes('broken') || sentenceLower.includes('down') ||
+              sentenceLower.includes('not running') || sentenceLower.includes('unhealthy') || sentenceLower.includes('crash')) {
+            findings.push(cleanSentence)
+            processedContent.add(cleanSentence)
+          }
+          
+          // Look for recommendations (suggestions, actions) - second priority
+          else if (sentenceLower.includes('recommend') || sentenceLower.includes('suggest') || sentenceLower.includes('should') || 
+              sentenceLower.includes('action') || sentenceLower.includes('fix') || sentenceLower.includes('resolve') ||
+              sentenceLower.includes('need to') || sentenceLower.includes('must') || sentenceLower.includes('required')) {
+            recommendations.push(cleanSentence)
+            processedContent.add(cleanSentence)
+          }
+          
+          // Look for insights (analysis, observations) - lowest priority, only if not already categorized
+          else if (sentenceLower.includes('analysis') || sentenceLower.includes('observe') || sentenceLower.includes('found') || 
+              sentenceLower.includes('detected') || sentenceLower.includes('identified') || sentenceLower.includes('shows') ||
+              sentenceLower.includes('running') || sentenceLower.includes('healthy') || sentenceLower.includes('status') ||
+              sentenceLower.includes('summary') || sentenceLower.includes('overview') || sentenceLower.includes('total')) {
+            insights.push(cleanSentence)
+            processedContent.add(cleanSentence)
+          }
+        })
       }
     })
 
-    // Remove duplicates and limit to top findings
+    // Clean and filter findings
+    const cleanFindings = [...new Set(findings)]
+      .filter(finding => finding.length > 10 && finding.length < 300)
+      .map(finding => finding.replace(/^\s*[0-9]+\.\s*/, '').trim()) // Remove leading numbers
+      .slice(0, 3)
+    
+    const cleanInsights = [...new Set(insights)]
+      .filter(insight => insight.length > 10 && insight.length < 300)
+      .map(insight => insight.replace(/^\s*[0-9]+\.\s*/, '').trim()) // Remove leading numbers
+      .slice(0, 3)
+    
+    const cleanRecommendations = [...new Set(recommendations)]
+      .filter(rec => rec.length > 10 && rec.length < 300)
+      .map(rec => rec.replace(/^\s*[0-9]+\.\s*/, '').trim()) // Remove leading numbers
+      .slice(0, 3)
+    
     return {
-      findings: [...new Set(findings)].slice(0, 5),
-      insights: [...new Set(insights)].slice(0, 5),
-      recommendations: [...new Set(recommendations)].slice(0, 5)
+      findings: cleanFindings,
+      insights: cleanInsights,
+      recommendations: cleanRecommendations
     }
   }
 
@@ -763,10 +780,15 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         currentY += height2 + 5
         
         checkPageBreak(15)
-        // Determine correct status based on progress
-        const isCompleted = currentStep >= investigation.agents.length - 1
+        // Determine correct status based on progress and investigation status
+        const isCompleted = currentStep >= investigation.agents.length - 1 || investigation.status === 'completed'
         const statusText = `Status: ${isCompleted ? 'Successfully completed' : 'In progress'}`
         addStyledText(statusText, margin, currentY, 10, textColor, false, pageWidth - (margin * 2))
+        
+        // Update the investigation status if it's completed but status doesn't match
+        if (isCompleted && investigation.status !== 'completed') {
+          onDebugInfo?.(`🔄 Updating investigation status to completed`)
+        }
         currentY += 20
         
         // Extract findings from actual chat messages
