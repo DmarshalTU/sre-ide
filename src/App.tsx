@@ -54,6 +54,15 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   
+  // Chat history management - store chat sessions for each agent
+  const [agentChatSessions, setAgentChatSessions] = useState<{
+    [agentName: string]: {
+      session: any
+      messages: ChatMessage[]
+      lastActive: string
+    }
+  }>({})
+  
   // Add connector modal state
   const [showAddConnector, setShowAddConnector] = useState(false)
   const [newConnectorName, setNewConnectorName] = useState('')
@@ -97,7 +106,7 @@ function App() {
   // Debug logging utility
   const addDebugInfo = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString()
-    setDebugInfo(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 49)])
+    setDebugInfo(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 199)]) // Increased to 200 messages
   }, [])
 
   // Listen for tab switching events from investigation
@@ -198,18 +207,40 @@ function App() {
       addDebugInfo(`Starting chat with agent: ${agent.name}`)
       setSelectedAgent(agent)
       
-      const sessionName = `Chat with ${agent.name} - ${new Date().toLocaleString()}`
-      addDebugInfo(`Creating session: ${sessionName}`)
+      // Check if we already have a chat session for this agent
+      const existingSession = agentChatSessions[agent.name]
       
-      const session = await currentConnectorAPI.createSessionWithName(agent.name, sessionName)
-      addDebugInfo(`Session created: ${session?.id || 'No ID'}`)
-      setCurrentSession(session)
-      
-      const messages = await currentConnectorAPI.getSessionMessages(session.id)
-      addDebugInfo(`Retrieved ${messages.length} messages`)
-      setChatMessages(messages)
-      
-      addDebugInfo(`✅ Chat session created: ${session.id}`)
+      if (existingSession) {
+        // Restore existing session
+        addDebugInfo(`🔄 Restoring existing chat session for ${agent.name}`)
+        setCurrentSession(existingSession.session)
+        setChatMessages(existingSession.messages)
+        addDebugInfo(`✅ Restored chat session with ${existingSession.messages.length} messages`)
+      } else {
+        // Create new session
+        const sessionName = `Chat with ${agent.name} - ${new Date().toLocaleString()}`
+        addDebugInfo(`Creating new session: ${sessionName}`)
+        
+        const session = await currentConnectorAPI.createSessionWithName(agent.name, sessionName)
+        addDebugInfo(`Session created: ${session?.id || 'No ID'}`)
+        setCurrentSession(session)
+        
+        const messages = await currentConnectorAPI.getSessionMessages(session.id)
+        addDebugInfo(`Retrieved ${messages.length} messages`)
+        setChatMessages(messages)
+        
+        // Store the new session in our history
+        setAgentChatSessions(prev => ({
+          ...prev,
+          [agent.name]: {
+            session,
+            messages,
+            lastActive: new Date().toISOString()
+          }
+        }))
+        
+        addDebugInfo(`✅ New chat session created: ${session.id}`)
+      }
       // Don't switch tabs - keep current tab active
     } catch (error) {
       console.error('Failed to start chat:', error)
@@ -249,6 +280,18 @@ function App() {
     }
     setChatMessages(prev => [...prev, userMessage])
     
+    // Update the stored chat history for this agent with user message
+    if (selectedAgent) {
+      setAgentChatSessions(prev => ({
+        ...prev,
+        [selectedAgent.name]: {
+          ...prev[selectedAgent.name],
+          messages: [...(prev[selectedAgent.name]?.messages || []), userMessage],
+          lastActive: new Date().toISOString()
+        }
+      }))
+    }
+    
     try {
       const response = await currentConnectorAPI.sendMessage(currentSession.id, message)
       
@@ -261,6 +304,19 @@ function App() {
         sessionId: currentSession.id
       }
       setChatMessages(prev => [...prev, chatMessage])
+      
+      // Update the stored chat history for this agent
+      if (selectedAgent) {
+        setAgentChatSessions(prev => ({
+          ...prev,
+          [selectedAgent.name]: {
+            ...prev[selectedAgent.name],
+            messages: [...(prev[selectedAgent.name]?.messages || []), userMessage, chatMessage],
+            lastActive: new Date().toISOString()
+          }
+        }))
+      }
+      
       addDebugInfo(`✅ Message sent successfully`)
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -439,108 +495,14 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Connection Status */}
-                  <div className="card">
+                  {/* Quick Actions - Prominent Position */}
+                  <div className="card" style={{ 
+                    background: 'var(--color-primary)05',
+                    borderColor: 'var(--color-primary)20',
+                    borderWidth: '2px'
+                  }}>
                     <div className="card-header">
-                      <h2 className="card-title">Overall Status</h2>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ 
-                          background: overallConnectionStatus.connected ? 'var(--color-success)20' : 'var(--color-error)20',
-                          borderColor: overallConnectionStatus.connected ? 'var(--color-success)40' : 'var(--color-error)40'
-                        }}>
-                          {overallConnectionStatus.connected ? (
-                            <CheckCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-success)' }} />
-                          ) : (
-                            <XCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-error)' }} />
-                          )}
-                        </div>
-                        <div className="metric-content">
-                          <p className="metric-label">Overall Status</p>
-                          <p className="metric-value">{overallConnectionStatus.connected ? 'Connected' : 'Disconnected'}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ 
-                          background: 'var(--color-info)20',
-                          borderColor: 'var(--color-info)40'
-                        }}>
-                          <Clock style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-info)' }} />
-                        </div>
-                        <div className="metric-content">
-                          <p className="metric-label">Last Check</p>
-                          <p className="metric-value">{overallConnectionStatus.lastChecked}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {overallConnectionStatus.error && (
-                      <div style={{
-                        marginTop: 'var(--spacing-md)',
-                        padding: 'var(--spacing-sm)',
-                        background: 'var(--color-error)10',
-                        border: '1px solid var(--color-error)20',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: '0.75rem',
-                        color: 'var(--color-error)'
-                      }}>
-                        Error: {overallConnectionStatus.error}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* System Metrics */}
-                  <div className="card">
-                    <div className="card-header">
-                      <h2 className="card-title">System Metrics</h2>
-                    </div>
-                    <div className="dashboard-grid grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ 
-                          background: 'var(--color-primary)20',
-                          borderColor: 'var(--color-primary)40'
-                        }}>
-                          <MessageSquare style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
-                        </div>
-                        <div className="metric-content">
-                          <p className="metric-label">Available Agents</p>
-                          <p className="metric-value">{allAgents.length}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ 
-                          background: 'var(--color-success)20',
-                          borderColor: 'var(--color-success)40'
-                        }}>
-                          <CheckCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-success)' }} />
-                        </div>
-                        <div className="metric-content">
-                          <p className="metric-label">Active Sessions</p>
-                          <p className="metric-value">{currentSession ? '1' : '0'}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ 
-                          background: 'var(--color-warning)20',
-                          borderColor: 'var(--color-warning)40'
-                        }}>
-                          <AlertTriangle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-warning)' }} />
-                        </div>
-                        <div className="metric-content">
-                          <p className="metric-label">Debug Messages</p>
-                          <p className="metric-value">{debugInfo.length}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="card">
-                    <div className="card-header">
-                      <h2 className="card-title">Quick Actions</h2>
+                      <h2 className="card-title" style={{ color: 'var(--color-primary)' }}>🚀 Quick Actions</h2>
                     </div>
                     <div className="dashboard-grid grid grid-cols-1 md:grid-cols-3 gap-4">
                       <QuickActionButton
@@ -561,6 +523,107 @@ function App() {
                         onClick={() => setActiveTab('cloud-tools')}
                         color="var(--color-info)"
                       />
+                    </div>
+                  </div>
+
+                  {/* System Status Overview */}
+                  <div className="dashboard-grid grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Connection Status */}
+                    <div className="card">
+                      <div className="card-header">
+                        <h3 className="card-title">Connection Status</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="metric-card">
+                          <div className="metric-icon" style={{ 
+                            background: overallConnectionStatus.connected ? 'var(--color-success)20' : 'var(--color-error)20',
+                            borderColor: overallConnectionStatus.connected ? 'var(--color-success)40' : 'var(--color-error)40'
+                          }}>
+                            {overallConnectionStatus.connected ? (
+                              <CheckCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-success)' }} />
+                            ) : (
+                              <XCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-error)' }} />
+                            )}
+                          </div>
+                          <div className="metric-content">
+                            <p className="metric-label">Status</p>
+                            <p className="metric-value">{overallConnectionStatus.connected ? 'Connected' : 'Disconnected'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="metric-card">
+                          <div className="metric-icon" style={{ 
+                            background: 'var(--color-info)20',
+                            borderColor: 'var(--color-info)40'
+                          }}>
+                            <Clock style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-info)' }} />
+                          </div>
+                          <div className="metric-content">
+                            <p className="metric-label">Last Check</p>
+                            <p className="metric-value">{overallConnectionStatus.lastChecked}</p>
+                          </div>
+                        </div>
+                      </div>
+                      {overallConnectionStatus.error && (
+                        <div style={{
+                          marginTop: 'var(--spacing-md)',
+                          padding: 'var(--spacing-sm)',
+                          background: 'var(--color-error)10',
+                          border: '1px solid var(--color-error)20',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.75rem',
+                          color: 'var(--color-error)'
+                        }}>
+                          Error: {overallConnectionStatus.error}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* System Metrics */}
+                    <div className="card">
+                      <div className="card-header">
+                        <h3 className="card-title">System Metrics</h3>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="metric-card">
+                          <div className="metric-icon" style={{ 
+                            background: 'var(--color-primary)20',
+                            borderColor: 'var(--color-primary)40'
+                          }}>
+                            <MessageSquare style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-primary)' }} />
+                          </div>
+                          <div className="metric-content">
+                            <p className="metric-label">Agents</p>
+                            <p className="metric-value">{allAgents.length}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="metric-card">
+                          <div className="metric-icon" style={{ 
+                            background: 'var(--color-success)20',
+                            borderColor: 'var(--color-success)40'
+                          }}>
+                            <CheckCircle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-success)' }} />
+                          </div>
+                          <div className="metric-content">
+                            <p className="metric-label">Sessions</p>
+                            <p className="metric-value">{currentSession ? '1' : '0'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="metric-card">
+                          <div className="metric-icon" style={{ 
+                            background: 'var(--color-warning)20',
+                            borderColor: 'var(--color-warning)40'
+                          }}>
+                            <AlertTriangle style={{ width: '1.25rem', height: '1.25rem', color: 'var(--color-warning)' }} />
+                          </div>
+                          <div className="metric-content">
+                            <p className="metric-label">Debug</p>
+                            <p className="metric-value">{debugInfo.length}</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -773,6 +836,7 @@ function App() {
                   onStartChat={startChatWithAgentSilent}
                   onDebugInfo={addDebugInfo}
                   chatMessages={chatMessages}
+                  agentChatSessions={agentChatSessions}
                 />
               </div>
             )}

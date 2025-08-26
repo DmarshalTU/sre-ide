@@ -2,7 +2,7 @@ import { useState, useEffect, memo } from 'react'
 import { 
   Search, AlertTriangle, BarChart3, Database, Network, 
   Shield, Cpu, FileText, ChevronRight, Download, Play, 
-  Clock, CheckCircle, XCircle, Loader2, MessageSquare
+  Clock, CheckCircle, XCircle, Loader2, MessageSquare, RefreshCw
 } from 'lucide-react'
 
 interface InvestigationTemplate {
@@ -20,9 +20,10 @@ interface InvestigationProps {
   onStartChat: (agent: any) => void
   onDebugInfo?: (message: string) => void
   chatMessages?: any[] // Add chat messages prop
+  agentChatSessions?: { [agentName: string]: { session: any; messages: any[]; lastActive: string } } // Add chat sessions prop
 }
 
-export const Investigation = memo(function Investigation({ agents, onStartChat, onDebugInfo, chatMessages = [] }: InvestigationProps) {
+export const Investigation = memo(function Investigation({ agents, onStartChat, onDebugInfo, chatMessages = [], agentChatSessions = {} }: InvestigationProps) {
   const [activeInvestigation, setActiveInvestigation] = useState<any>(() => {
     const saved = localStorage.getItem('sre-ide-active-investigation')
     return saved ? JSON.parse(saved) : null
@@ -94,6 +95,39 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
       }
     }
   }, [chatMessages, activeInvestigation?.id]) // Only depend on investigation ID, not the whole object
+
+  // Integrate chat sessions with investigation
+  const integrateChatSessionsWithInvestigation = () => {
+    if (!activeInvestigation) return
+    
+    const investigationAgents = activeInvestigation.agents || []
+    const integratedSessions: { [agentName: string]: any[] } = {}
+    
+    // Collect chat messages for each agent in the investigation
+    investigationAgents.forEach((agentName: string) => {
+      const agentSession = agentChatSessions[agentName]
+      if (agentSession && agentSession.messages) {
+        integratedSessions[agentName] = agentSession.messages
+        onDebugInfo?.(`📋 Integrated ${agentSession.messages.length} messages for ${agentName}`)
+      }
+    })
+    
+    // Update investigation with integrated sessions
+    setActiveInvestigation((prev: any) => ({
+      ...prev,
+      agentSessions: integratedSessions,
+      lastUpdated: new Date().toISOString()
+    }))
+    
+    onDebugInfo?.(`🔗 Integrated chat sessions for ${Object.keys(integratedSessions).length} agents`)
+  }
+
+  // Auto-integrate chat sessions when they change
+  useEffect(() => {
+    if (activeInvestigation && Object.keys(agentChatSessions).length > 0) {
+      integrateChatSessionsWithInvestigation()
+    }
+  }, [agentChatSessions, activeInvestigation?.id])
 
   const templates: InvestigationTemplate[] = [
     {
@@ -429,10 +463,26 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
   }
 
   // Get conversation summary for each agent
-  const getAgentConversationSummary = (): string => {
-    // Use investigation's stored chat messages if available, otherwise use current chat messages
-    const messagesToUse = activeInvestigation?.chatMessages || chatMessages || []
+  const getAgentConversationSummary = (agentName: string): string => {
+    // First check if we have integrated agent sessions
+    if (activeInvestigation?.agentSessions && activeInvestigation.agentSessions[agentName]) {
+      const agentMessages = activeInvestigation.agentSessions[agentName]
+      if (agentMessages && agentMessages.length > 0) {
+        const assistantMessages = agentMessages.filter((msg: any) => msg.role === 'assistant')
+        if (assistantMessages.length > 0) {
+          const lastMessage = assistantMessages[assistantMessages.length - 1]
+          if (lastMessage && lastMessage.content) {
+            // Extract first few sentences as summary
+            const sentences = lastMessage.content.split(/[.!?]+/).slice(0, 2)
+            return sentences.join('. ').trim() + '.'
+          }
+        }
+        return `Conversation recorded with ${agentMessages.length} messages`
+      }
+    }
     
+    // Fallback to current chat messages if no integrated sessions
+    const messagesToUse = activeInvestigation?.chatMessages || chatMessages || []
     if (!messagesToUse || messagesToUse.length === 0) {
       return 'No conversation data available'
     }
@@ -491,22 +541,24 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
             setDownloadProgress('Generating beautiful PDF...')
             onDebugInfo?.('📄 Creating PDF with professional design...')
             
-            // Calculate which agents were actually used and messages data FIRST
-            const messagesToUse = activeInvestigation?.chatMessages || chatMessages || []
+            // Calculate which agents were actually used based on integrated sessions
+            const agentSessions = activeInvestigation?.agentSessions || {}
+            const usedAgents = Object.keys(agentSessions).filter(agentName => {
+              const messages = agentSessions[agentName]
+              return messages && messages.length > 0
+            })
             
-            // If we have assistant messages, count the agent as used
-            const assistantMessages = messagesToUse.filter((msg: any) => msg.role === 'assistant')
-            const usedAgents = assistantMessages.length > 0 ? [investigation.agents[0]] : []
+            // If no integrated sessions, fallback to current chat messages
+            const messagesToUse = usedAgents.length === 0 ? (activeInvestigation?.chatMessages || chatMessages || []) : []
             
             // Debug logging
             console.log('PDF Generation Debug:', {
               totalAgents: investigation.agents.length,
               usedAgentsCount: usedAgents.length,
               messagesCount: messagesToUse.length,
-              assistantMessagesCount: assistantMessages.length,
+              agentSessions: Object.keys(agentSessions),
               usedAgents: usedAgents,
-              allAgents: investigation.agents,
-              messagesToUse: messagesToUse
+              allAgents: investigation.agents
             })
             
             // Create beautiful PDF using jsPDF
@@ -612,7 +664,7 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         currentY += lineHeight + 2
         
         // Calculate actual agents used for executive summary
-        const execSummaryAgentsUsed = usedAgents?.length > 0 ? usedAgents.length : (messagesToUse?.length > 0 ? 1 : 0)
+        const execSummaryAgentsUsed = usedAgents.length
         addStyledText(`Total Agents Used: ${execSummaryAgentsUsed}`, margin, currentY, 10)
         currentY += lineHeight + 2
         addStyledText(`Start Time: ${startTime.toLocaleString()}`, margin, currentY, 10)
@@ -660,7 +712,7 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
           currentY += descriptionHeight + 5
           
           // Add conversation summary for this agent
-          const conversationSummary = getAgentConversationSummary()
+          const conversationSummary = getAgentConversationSummary(agent)
           if (conversationSummary && conversationSummary !== 'No conversation data available' && conversationSummary !== 'No conversation with this agent recorded') {
             checkPageBreak(15)
             const summaryHeight = addStyledText(`  Summary: ${conversationSummary}`, margin + 5, currentY, 8, [59, 130, 246], false, pageWidth - (margin * 2) - 10)
@@ -681,7 +733,7 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         currentY += 15
         
         // Calculate actual usage for summary
-        const actualAgentsUsed = usedAgents.length > 0 ? usedAgents.length : 1 // At least 1 if we have any conversation
+        const actualAgentsUsed = usedAgents.length
         const summaryText1 = `This investigation utilized ${actualAgentsUsed} specialized agent${actualAgentsUsed > 1 ? 's' : ''} to systematically analyze the issue.`
         const height1 = addStyledText(summaryText1, margin, currentY, 10, textColor, false, pageWidth - (margin * 2))
         currentY += height1 + 5
@@ -698,6 +750,32 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         
         // Extract findings from actual chat messages
         const { findings, insights, recommendations } = extractFindingsFromChat()
+        
+        // Debug Information Section
+        checkPageBreak(40)
+        addStyledText('DEBUG INFORMATION', margin, currentY, 14, primaryColor, true)
+        currentY += 8
+        addColoredRect(margin, currentY, pageWidth - (margin * 2), 0.5, primaryColor)
+        currentY += 15
+        
+        // Show debug info from the investigation
+        const debugMessages = [
+          `Investigation ID: ${investigation.id}`,
+          `Total Agents in Template: ${investigation.agents.length}`,
+          `Agents with Chat Sessions: ${usedAgents.length}`,
+          `Agent Sessions: ${Object.keys(agentSessions).join(', ')}`,
+          `Investigation Status: ${investigation.status}`,
+          `Current Step: ${currentStep + 1}`,
+          `Report Generated: ${new Date().toLocaleString()}`
+        ]
+        
+        debugMessages.forEach((debugMsg: string) => {
+          checkPageBreak(15)
+          const debugHeight = addStyledText(`• ${debugMsg}`, margin, currentY, 8, [107, 114, 128], false, pageWidth - (margin * 2))
+          currentY += debugHeight + 5
+        })
+        
+        currentY += 10
         
         // Variables already calculated at the beginning of PDF generation
         
@@ -774,8 +852,62 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         addStyledText(`Report Generated: ${new Date().toLocaleString()}`, margin, currentY, 10)
         currentY += 20
         
-        // Conversation History Section (if there are chat messages)
-        if (messagesToUse && messagesToUse.length > 0) {
+        // Individual Agent Conversations Section
+        if (usedAgents.length > 0) {
+          checkPageBreak(40)
+          addStyledText('AGENT CONVERSATIONS', margin, currentY, 14, primaryColor, true)
+          currentY += 8
+          addColoredRect(margin, currentY, pageWidth - (margin * 2), 0.5, primaryColor)
+          currentY += 15
+          
+          usedAgents.forEach((agentName: string) => {
+            checkPageBreak(30)
+            
+            // Agent header
+            addStyledText(`🤖 ${agentName}`, margin, currentY, 12, primaryColor, true)
+            currentY += lineHeight + 5
+            
+            const agentMessages = agentSessions[agentName] || []
+            if (agentMessages.length > 0) {
+              // Show last few messages for this agent
+              const recentMessages = agentMessages.slice(-4) // Last 4 messages per agent
+              recentMessages.forEach((message: any) => {
+                checkPageBreak(25)
+                
+                const isUser = message.role === 'user'
+                const roleText = isUser ? '👤 User' : '🤖 Agent'
+                const timestamp = new Date(message.timestamp).toLocaleTimeString()
+                
+                // Message header
+                addStyledText(`${roleText} - ${timestamp}`, margin + 5, currentY, 8, isUser ? [59, 130, 246] : [16, 185, 129], true)
+                currentY += lineHeight
+                
+                // Message content (truncated if too long)
+                const maxLength = 600
+                const content = message.content.length > maxLength 
+                  ? message.content.substring(0, maxLength) + '...' 
+                  : message.content
+                
+                const contentHeight = addStyledText(content, margin + 10, currentY, 9, textColor, false, pageWidth - (margin * 2) - 15)
+                currentY += contentHeight + 8
+              })
+              
+              if (agentMessages.length > 4) {
+                checkPageBreak(10)
+                addStyledText(`... and ${agentMessages.length - 4} more messages`, margin + 5, currentY, 8, [107, 114, 128], false, pageWidth - (margin * 2) - 10)
+                currentY += lineHeight + 5
+              }
+            } else {
+              addStyledText(`No conversation recorded with ${agentName}`, margin + 5, currentY, 9, [107, 114, 128], false, pageWidth - (margin * 2) - 10)
+              currentY += lineHeight + 5
+            }
+            
+            currentY += 10 // Space between agents
+          })
+        }
+        
+        // General Conversation History Section (if there are chat messages)
+        if (messagesToUse && messagesToUse.length > 0 && usedAgents.length === 0) {
           checkPageBreak(40)
           addStyledText('CONVERSATION HISTORY', margin, currentY, 14, primaryColor, true)
           currentY += 8
@@ -1220,8 +1352,57 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
               }}>
                 Step {currentStep + 1} of {activeInvestigation.agents.length}
               </p>
+              {/* Show chat session status */}
+              {activeInvestigation.agents.map((agentName: string, index: number) => {
+                const hasChatSession = agentChatSessions[agentName] && agentChatSessions[agentName].messages.length > 0
+                return (
+                  <div key={agentName} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--spacing-xs)',
+                    marginTop: 'var(--spacing-xs)',
+                    fontSize: '0.7rem'
+                  }}>
+                    <div style={{
+                      width: '0.5rem',
+                      height: '0.5rem',
+                      borderRadius: '50%',
+                      background: hasChatSession ? 'var(--color-success)' : 'var(--color-text-muted)',
+                      opacity: index === currentStep ? 1 : 0.5
+                    }} />
+                    <span style={{
+                      color: index === currentStep ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                      fontWeight: index === currentStep ? '600' : '400'
+                    }}>
+                      {agentName} {hasChatSession ? `(${agentChatSessions[agentName].messages.length} msgs)` : ''}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
             <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+              <button
+                onClick={() => {
+                  if (currentStep > 0) {
+                    setCurrentStep(currentStep - 1)
+                    setActiveInvestigation((prev: any) => ({
+                      ...prev,
+                      currentStep: currentStep - 1
+                    }))
+                    onDebugInfo?.(`⬅️ Moved to previous agent: ${activeInvestigation.agents[currentStep - 1]}`)
+                  }
+                }}
+                disabled={currentStep <= 0}
+                className="btn btn-ghost"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-sm)',
+                  fontSize: '0.875rem'
+                }}
+              >
+                ← Previous
+              </button>
               <button
                 onClick={() => {
                   // Go to chat with current agent
@@ -1246,6 +1427,19 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
               >
                 <MessageSquare style={{ width: '1rem', height: '1rem' }} />
                 Go to Chat
+              </button>
+              <button
+                onClick={integrateChatSessionsWithInvestigation}
+                className="btn btn-ghost"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-sm)',
+                  fontSize: '0.875rem'
+                }}
+              >
+                <RefreshCw style={{ width: '1rem', height: '1rem' }} />
+                Sync Chat
               </button>
               <button
                 onClick={nextStep}
