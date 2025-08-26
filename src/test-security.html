@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Security Scanner Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        textarea { width: 100%; margin: 10px 0; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #result { margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Security Scanner Test</h1>
+    <p>This is a test page for the SecurityScanner component. Use it to test sensitive data detection.</p>
+    
+    <textarea id="input" rows="10" cols="50" placeholder="Type text to scan for sensitive data...">My password is [TEST_PASSWORD]</textarea>
+    <button onclick="scan()">Scan for Sensitive Data</button>
+    <div id="result"></div>
+    
+    <script type="module">
+        import { SecurityScanner } from './lib/securityScanner.js';
+        
+        window.scan = function() {
+            const text = document.getElementById('input').value;
+            const result = SecurityScanner.scan(text);
+            
+            document.getElementById('result').innerHTML = `
+                <h3>Scan Results:</h3>
+                <p><strong>Has Sensitive Data:</strong> ${result.hasSensitiveData}</p>
+                <p><strong>High Risk:</strong> ${result.summary.high}</p>
+                <p><strong>Medium Risk:</strong> ${result.summary.medium}</p>
+                <p><strong>Low Risk:</strong> ${result.summary.low}</p>
+                <h4>Findings:</h4>
+                <ul>
+                    ${result.findings.map(f => `<li>${f.type}: ${f.match} (${f.severity})</li>`).join('')}
+                </ul>
+                <h4>Masked Text:</h4>
+                <p style="background: #f8f9fa; padding: 10px; border-radius: 3px;">${SecurityScanner.mask(text).maskedText}</p>
+            `;
+        }
+        
+        // Auto-scan on load
+        window.scan();
+    </script>
+</body>
+</html>

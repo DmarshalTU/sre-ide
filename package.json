@@ -1,0 +1,25 @@
+{
+  "name": "sre-ide",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:mac": "cd src && npm run build && cd .. && tauri build --target aarch64-apple-darwin",
+    "install:mac": "./install.sh",
+    "create-dmg": "./create-dmg.sh",
+    "dev": "cd src && npm run dev",
+    "build": "cd src && npm run build",
+    "build:windows": "cd src && npm run build && cd .. && tauri build --target x86_64-pc-windows-msvc",
+    "build:linux": "cd src && npm run build && cd .. && tauri build --target x86_64-unknown-linux-gnu",
+    "build:all": "npm run build:mac && npm run build:windows && npm run build:linux",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "install:all": "cd src && npm install",
+    "lint": "cd src && npm run lint",
+    "preview": "cd src && npm run preview"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
