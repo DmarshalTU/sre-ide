@@ -109,6 +109,24 @@ function App() {
     setDebugInfo(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 199)]) // Increased to 200 messages
   }, [])
 
+  // Memory management - limit chat sessions to prevent memory issues
+  const cleanupOldChatSessions = useCallback(() => {
+    setAgentChatSessions(prev => {
+      const cleaned: typeof prev = {}
+      Object.keys(prev).forEach(agentName => {
+        const session = prev[agentName]
+        if (session && session.messages) {
+          // Keep only last 50 messages per agent to prevent memory issues
+          cleaned[agentName] = {
+            ...session,
+            messages: session.messages.slice(-50)
+          }
+        }
+      })
+      return cleaned
+    })
+  }, [])
+
   // Listen for tab switching events from investigation
   useEffect(() => {
     const handleSwitchToChat = () => {
@@ -118,6 +136,15 @@ function App() {
     window.addEventListener('switchToChat', handleSwitchToChat)
     return () => window.removeEventListener('switchToChat', handleSwitchToChat)
   }, [])
+
+  // Periodic cleanup to prevent memory issues
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      cleanupOldChatSessions()
+    }, 60000) // Clean up every minute
+
+    return () => clearInterval(cleanupInterval)
+  }, [cleanupOldChatSessions])
 
   // Connect to a KAgent instance
   const connectToConnector = async (connector: KAgentConnector) => {
@@ -265,7 +292,10 @@ function App() {
 
   // Send a message to the current chat session
   const handleSendMessage = async (message: string) => {
-    if (!currentSession || !selectedAgent || !currentConnectorAPI) return
+    if (!currentSession || !selectedAgent || !currentConnectorAPI) {
+      addDebugInfo(`❌ Cannot send message: missing session, agent, or API`)
+      return
+    }
     
     setIsSendingMessage(true)
     addDebugInfo(`📤 Sending message to ${selectedAgent.name}: ${message.substring(0, 50)}...`)
@@ -282,14 +312,19 @@ function App() {
     
     // Update the stored chat history for this agent with user message
     if (selectedAgent) {
-      setAgentChatSessions(prev => ({
-        ...prev,
-        [selectedAgent.name]: {
-          ...prev[selectedAgent.name],
-          messages: [...(prev[selectedAgent.name]?.messages || []), userMessage],
-          lastActive: new Date().toISOString()
-        }
-      }))
+      try {
+        setAgentChatSessions(prev => ({
+          ...prev,
+          [selectedAgent.name]: {
+            ...prev[selectedAgent.name],
+            messages: [...(prev[selectedAgent.name]?.messages || []), userMessage],
+            lastActive: new Date().toISOString()
+          }
+        }))
+      } catch (error) {
+        console.error('Error updating agent chat sessions:', error)
+        addDebugInfo(`❌ Error updating chat history: ${error}`)
+      }
     }
     
     try {
@@ -307,14 +342,19 @@ function App() {
       
       // Update the stored chat history for this agent
       if (selectedAgent) {
-        setAgentChatSessions(prev => ({
-          ...prev,
-          [selectedAgent.name]: {
-            ...prev[selectedAgent.name],
-            messages: [...(prev[selectedAgent.name]?.messages || []), userMessage, chatMessage],
-            lastActive: new Date().toISOString()
-          }
-        }))
+        try {
+          setAgentChatSessions(prev => ({
+            ...prev,
+            [selectedAgent.name]: {
+              ...prev[selectedAgent.name],
+              messages: [...(prev[selectedAgent.name]?.messages || []), userMessage, chatMessage],
+              lastActive: new Date().toISOString()
+            }
+          }))
+        } catch (error) {
+          console.error('Error updating agent chat sessions:', error)
+          addDebugInfo(`❌ Error updating chat history: ${error}`)
+        }
       }
       
       addDebugInfo(`✅ Message sent successfully`)

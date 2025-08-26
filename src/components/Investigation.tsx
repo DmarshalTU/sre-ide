@@ -548,6 +548,22 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
               return messages && messages.length > 0
             })
             
+            // If no agent sessions found, try to get from current chat sessions
+            if (usedAgents.length === 0 && agentChatSessions) {
+              const chatSessionAgents = Object.keys(agentChatSessions).filter(agentName => {
+                const session = agentChatSessions[agentName]
+                return session && session.messages && session.messages.length > 0
+              })
+              
+              if (chatSessionAgents.length > 0) {
+                // Use chat sessions as fallback
+                chatSessionAgents.forEach(agentName => {
+                  agentSessions[agentName] = agentChatSessions[agentName].messages
+                })
+                usedAgents.push(...chatSessionAgents)
+              }
+            }
+            
             // If no integrated sessions, fallback to current chat messages
             const messagesToUse = usedAgents.length === 0 ? (activeInvestigation?.chatMessages || chatMessages || []) : []
             
@@ -659,6 +675,9 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         const endTime = investigation.endTime ? new Date(investigation.endTime) : new Date()
         const duration = Math.max(1, Math.round((endTime.getTime() - startTime.getTime()) / 60000)) // Ensure minimum 1 minute
         
+        // Fix end time if it's in the past (wrong timezone issue)
+        const correctedEndTime = endTime < startTime ? new Date() : endTime
+        
         checkPageBreak(40)
         addStyledText(`Investigation Duration: ${duration} minute${duration !== 1 ? 's' : ''}`, margin, currentY, 10)
         currentY += lineHeight + 2
@@ -669,7 +688,7 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         currentY += lineHeight + 2
         addStyledText(`Start Time: ${startTime.toLocaleString()}`, margin, currentY, 10)
         currentY += lineHeight + 2
-        addStyledText(`End Time: ${endTime.toLocaleString()}`, margin, currentY, 10)
+        addStyledText(`End Time: ${correctedEndTime.toLocaleString()}`, margin, currentY, 10)
         currentY += 20
         
         // Investigation Flow
@@ -744,7 +763,9 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         currentY += height2 + 5
         
         checkPageBreak(15)
-        const statusText = `Status: ${investigation.status === 'completed' ? 'Successfully completed' : 'In progress'}`
+        // Determine correct status based on progress
+        const isCompleted = currentStep >= investigation.agents.length - 1
+        const statusText = `Status: ${isCompleted ? 'Successfully completed' : 'In progress'}`
         addStyledText(statusText, margin, currentY, 10, textColor, false, pageWidth - (margin * 2))
         currentY += 20
         

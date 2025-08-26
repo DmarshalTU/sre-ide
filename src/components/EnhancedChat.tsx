@@ -50,24 +50,37 @@ export function EnhancedChat({
   useEffect(() => {
     // Update token stats when messages change
     if (messages.length > 0) {
-      const stats = NDJSONOptimizer.getTokenSummary(messages)
-      const conversationOptimization = NDJSONOptimizer.optimizeConversation(messages)
-      setTokenStats({
-        ...stats,
-        optimization: conversationOptimization.stats
-      })
+      try {
+        const stats = NDJSONOptimizer.getTokenSummary(messages)
+        const conversationOptimization = NDJSONOptimizer.optimizeConversation(messages)
+        setTokenStats({
+          ...stats,
+          optimization: conversationOptimization.stats
+        })
+      } catch (error) {
+        console.error('Error updating token stats:', error)
+        // Don't crash the app, just skip token stats
+        setTokenStats(null)
+      }
     }
   }, [messages])
 
   const handleInputChange = (value: string) => {
     setInputMessage(value)
     
-    // Scan for sensitive data
-    const scanResult = SecurityScanner.scan(value)
-    if (scanResult.hasSensitiveData) {
-      setSensitiveFindings(scanResult)
-      setShowSensitiveWarning(true)
-    } else {
+    // Scan for sensitive data with error handling
+    try {
+      const scanResult = SecurityScanner.scan(value)
+      if (scanResult.hasSensitiveData) {
+        setSensitiveFindings(scanResult)
+        setShowSensitiveWarning(true)
+      } else {
+        setSensitiveFindings(null)
+        setShowSensitiveWarning(false)
+      }
+    } catch (error) {
+      console.error('Error scanning for sensitive data:', error)
+      // Don't crash the app, just skip sensitive data scanning
       setSensitiveFindings(null)
       setShowSensitiveWarning(false)
     }
@@ -83,19 +96,31 @@ export function EnhancedChat({
     let messageToSend = inputMessage
 
     // Apply masking if enabled and sensitive data detected
-    if (maskSensitiveData && sensitiveFindings?.hasSensitiveData) {
-      const masked = SecurityScanner.mask(inputMessage)
-      messageToSend = masked.maskedText
-      onDebugInfo?.(`Security: ${SecurityScanner.getMaskingSummary(inputMessage, masked.maskedText)}`)
+    try {
+      if (maskSensitiveData && sensitiveFindings?.hasSensitiveData) {
+        const masked = SecurityScanner.mask(inputMessage)
+        messageToSend = masked.maskedText
+        onDebugInfo?.(`Security: ${SecurityScanner.getMaskingSummary(inputMessage, masked.maskedText)}`)
+      }
+    } catch (error) {
+      console.error('Error masking sensitive data:', error)
+      // Continue with original message if masking fails
     }
 
-    // Optimize message
-    const optimized = NDJSONOptimizer.optimizeMessage(messageToSend)
-    onDebugInfo?.(`Token optimization: Saved ${optimized.stats.saved} tokens (${optimized.stats.savingsPercent}%)`)
+    // Optimize message with error handling
+    try {
+      const optimized = NDJSONOptimizer.optimizeMessage(messageToSend)
+      onDebugInfo?.(`Token optimization: Saved ${optimized.stats.saved} tokens (${optimized.stats.savingsPercent}%)`)
+      messageToSend = optimized.optimized
+    } catch (error) {
+      console.error('Error optimizing message:', error)
+      // Continue with original message if optimization fails
+      onDebugInfo?.(`Token optimization: Skipped due to error`)
+    }
     
     try {
       // Send the optimized and masked message
-      await onSendMessage(optimized.optimized)
+      await onSendMessage(messageToSend)
       console.log('Message sent successfully')
       setInputMessage('')
       setShowSensitiveWarning(false)
