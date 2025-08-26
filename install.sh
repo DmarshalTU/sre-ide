@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # SRE IDE Installation Script
-echo "🚀 Installing SRE IDE..."
+echo "🚀 Creating SRE IDE DMG installer..."
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_PATH="$SCRIPT_DIR/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/sre-ide.app"
-APPLICATIONS_DIR="/Applications"
+DMG_PATH="$SCRIPT_DIR/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/sre-ide_installer.dmg"
 
 # Check if the app exists
 if [ ! -d "$APP_PATH" ]; then
@@ -15,32 +15,44 @@ if [ ! -d "$APP_PATH" ]; then
     exit 1
 fi
 
-# Check if app is already installed
-if [ -d "$APPLICATIONS_DIR/sre-ide.app" ]; then
-    echo "⚠️  SRE IDE is already installed. Removing old version..."
-    rm -rf "$APPLICATIONS_DIR/sre-ide.app"
+# Clean up old DMG files (Tauri creates multiple with random names)
+echo "🧹 Cleaning up old DMG files..."
+find "$SCRIPT_DIR/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/" -name "rw.*.sre-ide_*.dmg" -delete 2>/dev/null || true
+
+# Remove old installer DMG if it exists
+if [ -f "$DMG_PATH" ]; then
+    echo "🗑️  Removing old installer DMG..."
+    rm "$DMG_PATH"
 fi
 
-# Copy the app to Applications
-echo "📦 Copying SRE IDE to Applications..."
-cp -R "$APP_PATH" "$APPLICATIONS_DIR/"
+# Create DMG
+echo "🔨 Creating DMG installer..."
+create-dmg \
+    --volname "SRE IDE Installer" \
+    --volicon "$SCRIPT_DIR/src-tauri/icons/icon.icns" \
+    --window-pos 200 120 \
+    --window-size 600 400 \
+    --icon-size 100 \
+    --icon "sre-ide.app" 175 120 \
+    --hide-extension "sre-ide.app" \
+    --app-drop-link 425 120 \
+    --no-internet-enable \
+    "$DMG_PATH" \
+    "$APP_PATH"
 
-# Set proper permissions
-echo "🔐 Setting permissions..."
-chmod +x "$APPLICATIONS_DIR/sre-ide.app/Contents/MacOS/sre-ide"
-
-# Verify installation
-if [ -d "$APPLICATIONS_DIR/sre-ide.app" ]; then
-    echo "✅ SRE IDE successfully installed to $APPLICATIONS_DIR/sre-ide.app"
+# Check if DMG was created successfully
+if [ -f "$DMG_PATH" ]; then
+    echo "✅ DMG installer created successfully!"
+    echo "📁 Location: $DMG_PATH"
     echo ""
-    echo "🎉 Installation complete! You can now:"
-    echo "   • Find SRE IDE in your Applications folder"
-    echo "   • Launch it from Spotlight (Cmd+Space, then type 'SRE IDE')"
-    echo "   • Add it to your Dock for quick access"
+    echo "🎉 You can now:"
+    echo "   • Double-click the DMG to mount it"
+    echo "   • Drag SRE IDE to your Applications folder"
+    echo "   • Unmount the DMG when done"
     echo ""
-    echo "🚀 Launching SRE IDE..."
-    open "$APPLICATIONS_DIR/sre-ide.app"
+    echo "🚀 Opening DMG location..."
+    open "$(dirname "$DMG_PATH")"
 else
-    echo "❌ Installation failed. Please check permissions and try again."
+    echo "❌ Failed to create DMG installer."
     exit 1
 fi

@@ -6,7 +6,9 @@
   "scripts": {
     "build:mac": "cd src && npm run build && cd .. && tauri build --target aarch64-apple-darwin",
     "install:mac": "./install.sh",
+    "install:direct": "./install-direct.sh",
     "create-dmg": "./create-dmg.sh",
+    "cleanup-dmgs": "./cleanup-dmgs.sh",
     "dev": "cd src && npm run dev",
     "build": "cd src && npm run build",
     "build:windows": "cd src && npm run build && cd .. && tauri build --target x86_64-pc-windows-msvc",
