@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { 
   Search, AlertTriangle, BarChart3, Database, Network, 
   Shield, Cpu, FileText, ChevronRight, Download, Play, 
@@ -22,7 +22,7 @@ interface InvestigationProps {
   chatMessages?: any[] // Add chat messages prop
 }
 
-export function Investigation({ agents, onStartChat, onDebugInfo, chatMessages = [] }: InvestigationProps) {
+export const Investigation = memo(function Investigation({ agents, onStartChat, onDebugInfo, chatMessages = [] }: InvestigationProps) {
   const [activeInvestigation, setActiveInvestigation] = useState<any>(() => {
     const saved = localStorage.getItem('sre-ide-active-investigation')
     return saved ? JSON.parse(saved) : null
@@ -48,49 +48,52 @@ export function Investigation({ agents, onStartChat, onDebugInfo, chatMessages =
   const [showDownloadAlert, setShowDownloadAlert] = useState(false)
   const [downloadAlertMessage, setDownloadAlertMessage] = useState('')
 
-  // Debug: Only log on mount or when agents change
+  // Combined useEffect to reduce flickering - only run on mount and when agents change
   useEffect(() => {
     console.log('Investigation component mounted/updated:', {
       agentCount: agents.length,
       hasActiveInvestigation: !!activeInvestigation,
       currentStep
     })
-  }, [agents.length, !!activeInvestigation])
+  }, [agents.length, !!activeInvestigation, currentStep])
 
-  // Save state to localStorage
+  // Save state to localStorage - debounced to reduce writes
   useEffect(() => {
-    if (activeInvestigation) {
-      localStorage.setItem('sre-ide-active-investigation', JSON.stringify(activeInvestigation))
-    } else {
-      localStorage.removeItem('sre-ide-active-investigation')
-    }
+    const timeoutId = setTimeout(() => {
+      if (activeInvestigation) {
+        localStorage.setItem('sre-ide-active-investigation', JSON.stringify(activeInvestigation))
+      } else {
+        localStorage.removeItem('sre-ide-active-investigation')
+      }
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
   }, [activeInvestigation])
 
-  // Sync currentStep with the investigation's currentStep (separate effect to avoid infinite loop)
+  // Save investigation history - debounced
   useEffect(() => {
-    if (activeInvestigation && activeInvestigation.currentStep !== undefined && activeInvestigation.currentStep !== currentStep) {
-      setCurrentStep(activeInvestigation.currentStep)
-    } else if (!activeInvestigation) {
-      setCurrentStep(0)
-    }
-  }, [activeInvestigation]) // Only depend on activeInvestigation, not currentStep
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem('sre-ide-investigation-history', JSON.stringify(investigationHistory))
+    }, 100)
 
-  useEffect(() => {
-    localStorage.setItem('sre-ide-investigation-history', JSON.stringify(investigationHistory))
+    return () => clearTimeout(timeoutId)
   }, [investigationHistory])
 
-  // Update investigation with new chat messages when they arrive
+  // Update investigation with new chat messages when they arrive - optimized
   useEffect(() => {
     if (activeInvestigation && chatMessages && chatMessages.length > 0) {
-      // Only add messages that aren't already in the investigation
       const existingMessageIds = new Set(activeInvestigation.chatMessages?.map((msg: any) => msg.id) || [])
       const newMessages = chatMessages.filter((msg: any) => !existingMessageIds.has(msg.id))
       
       if (newMessages.length > 0) {
-        updateInvestigationChatMessages(newMessages)
+        setActiveInvestigation((prev: any) => ({
+          ...prev,
+          chatMessages: [...(prev.chatMessages || []), ...newMessages]
+        }))
+        onDebugInfo?.(`📝 Updated investigation with ${newMessages.length} new chat messages`)
       }
     }
-  }, [chatMessages, activeInvestigation])
+  }, [chatMessages, activeInvestigation?.id]) // Only depend on investigation ID, not the whole object
 
   const templates: InvestigationTemplate[] = [
     {
@@ -425,17 +428,6 @@ export function Investigation({ agents, onStartChat, onDebugInfo, chatMessages =
     }
   }
 
-  // Update investigation with new chat messages
-  const updateInvestigationChatMessages = (newMessages: any[]) => {
-    if (activeInvestigation && newMessages.length > 0) {
-      setActiveInvestigation((prev: any) => ({
-        ...prev,
-        chatMessages: [...(prev.chatMessages || []), ...newMessages]
-      }))
-      onDebugInfo?.(`📝 Updated investigation with ${newMessages.length} new chat messages`)
-    }
-  }
-
   // Get conversation summary for each agent
   const getAgentConversationSummary = (): string => {
     // Use investigation's stored chat messages if available, otherwise use current chat messages
@@ -613,10 +605,10 @@ export function Investigation({ agents, onStartChat, onDebugInfo, chatMessages =
         
         const startTime = new Date(investigation.startTime)
         const endTime = investigation.endTime ? new Date(investigation.endTime) : new Date()
-        const duration = Math.round((endTime.getTime() - startTime.getTime()) / 60000)
+        const duration = Math.max(1, Math.round((endTime.getTime() - startTime.getTime()) / 60000)) // Ensure minimum 1 minute
         
         checkPageBreak(40)
-        addStyledText(`Investigation Duration: ${duration} minutes`, margin, currentY, 10)
+        addStyledText(`Investigation Duration: ${duration} minute${duration !== 1 ? 's' : ''}`, margin, currentY, 10)
         currentY += lineHeight + 2
         
         // Calculate actual agents used for executive summary
@@ -695,7 +687,7 @@ export function Investigation({ agents, onStartChat, onDebugInfo, chatMessages =
         currentY += height1 + 5
         
         checkPageBreak(15)
-        const summaryText2 = `The investigation was completed in ${duration} minutes with detailed analysis and findings.`
+        const summaryText2 = `The investigation was completed in ${duration} minute${duration !== 1 ? 's' : ''} with detailed analysis and findings.`
         const height2 = addStyledText(summaryText2, margin, currentY, 10, textColor, false, pageWidth - (margin * 2))
         currentY += height2 + 5
         
@@ -1646,4 +1638,4 @@ export function Investigation({ agents, onStartChat, onDebugInfo, chatMessages =
       )}
     </div>
   )
-}
+})

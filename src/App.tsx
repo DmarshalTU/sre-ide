@@ -189,10 +189,14 @@ function App() {
       setSelectedAgent(agent)
       
       const sessionName = `Chat with ${agent.name} - ${new Date().toLocaleString()}`
+      addDebugInfo(`Creating session: ${sessionName}`)
+      
       const session = await currentConnectorAPI.createSessionWithName(agent.name, sessionName)
+      addDebugInfo(`Session created: ${session?.id || 'No ID'}`)
       setCurrentSession(session)
       
       const messages = await currentConnectorAPI.getSessionMessages(session.id)
+      addDebugInfo(`Retrieved ${messages.length} messages`)
       setChatMessages(messages)
       
       addDebugInfo(`✅ Chat session created: ${session.id}`)
@@ -200,6 +204,15 @@ function App() {
     } catch (error) {
       console.error('Failed to start chat:', error)
       addDebugInfo(`❌ Failed to start chat: ${error}`)
+      
+      // Show error to user
+      setChatMessages([{
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Failed to start chat with ${agent.name}. Please check your connection and try again.`,
+        timestamp: new Date().toISOString(),
+        sessionId: 'error'
+      }])
     }
   }
 
@@ -256,6 +269,45 @@ function App() {
     // TODO: Implement search across agents and messages
   }
 
+  // Handle agent selection and start chat
+  const handleAgentSelection = async (agent: KagentAgent) => {
+    setSelectedAgent(agent)
+    await startChatWithAgent(agent)
+  }
+
+  // Clear current chat session
+  const clearChatSession = () => {
+    setCurrentSession(null)
+    setSelectedAgent(null)
+    setChatMessages([])
+    addDebugInfo('Chat session cleared')
+  }
+
+  // Start a standalone chat (not part of investigation)
+  const startStandaloneChat = async (agent: KagentAgent) => {
+    if (!currentConnectorAPI) {
+      addDebugInfo('❌ No active connector available')
+      return
+    }
+    
+    try {
+      addDebugInfo(`Starting standalone chat with agent: ${agent.name}`)
+      setSelectedAgent(agent)
+      
+      const sessionName = `Standalone Chat with ${agent.name} - ${new Date().toLocaleString()}`
+      const session = await currentConnectorAPI.createSessionWithName(agent.name, sessionName)
+      setCurrentSession(session)
+      
+      const messages = await currentConnectorAPI.getSessionMessages(session.id)
+      setChatMessages(messages)
+      
+      addDebugInfo(`✅ Standalone chat session created: ${session.id}`)
+      setActiveTab('chat')
+    } catch (error) {
+      console.error('Failed to start standalone chat:', error)
+      addDebugInfo(`❌ Failed to start standalone chat: ${error}`)
+    }
+  }
 
 
   return (
@@ -526,14 +578,169 @@ function App() {
 
             {activeTab === 'chat' && (
               <div className="slide-in-right">
-                <EnhancedChat
-                  currentSession={currentSession}
-                  selectedAgent={selectedAgent}
-                  messages={chatMessages}
-                  onSendMessage={handleSendMessage}
-                  isSending={isSendingMessage}
-                  onDebugInfo={addDebugInfo}
-                />
+                {currentSession && selectedAgent ? (
+                  <div>
+                    <div className="card" style={{
+                      marginBottom: 'var(--spacing-lg)',
+                      background: 'var(--color-bg-secondary)',
+                      border: '1px solid var(--color-border-primary)'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: 'var(--spacing-md)'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--spacing-sm)'
+                        }}>
+                          <div style={{
+                            width: '0.5rem',
+                            height: '0.5rem',
+                            borderRadius: '50%',
+                            background: 'var(--color-success)',
+                            animation: 'status-pulse 2s infinite'
+                          }} />
+                          <span style={{
+                            fontSize: '0.875rem',
+                            color: 'var(--color-text-secondary)',
+                            fontWeight: '500'
+                          }}>
+                            Active Chat: {selectedAgent.name}
+                          </span>
+                        </div>
+                        <button
+                          onClick={clearChatSession}
+                          className="btn btn-ghost"
+                          style={{
+                            fontSize: '0.875rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--spacing-sm)'
+                          }}
+                        >
+                          <MessageSquare style={{ width: '1rem', height: '1rem' }} />
+                          New Chat
+                        </button>
+                      </div>
+                    </div>
+                    <EnhancedChat
+                      currentSession={currentSession}
+                      selectedAgent={selectedAgent}
+                      messages={chatMessages}
+                      onSendMessage={handleSendMessage}
+                      isSending={isSendingMessage}
+                      onDebugInfo={addDebugInfo}
+                    />
+                  </div>
+                ) : (
+                  <div className="card">
+                    <div className="card-header">
+                      <h2 className="card-title">Start a Chat Session</h2>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--spacing-sm)',
+                        padding: 'var(--spacing-xs) var(--spacing-sm)',
+                        background: allAgents.length > 0 ? 'var(--color-success)10' : 'var(--color-error)10',
+                        borderRadius: 'var(--radius-sm)',
+                        border: `1px solid ${allAgents.length > 0 ? 'var(--color-success)20' : 'var(--color-error)20'}`
+                      }}>
+                        <div style={{
+                          width: '0.5rem',
+                          height: '0.5rem',
+                          borderRadius: '50%',
+                          background: allAgents.length > 0 ? 'var(--color-success)' : 'var(--color-error)',
+                          animation: allAgents.length > 0 ? 'status-pulse 2s infinite' : 'none'
+                        }} />
+                        <span style={{ 
+                          fontSize: '0.75rem', 
+                          color: allAgents.length > 0 ? 'var(--color-success)' : 'var(--color-error)',
+                          fontWeight: '500'
+                        }}>
+                          {allAgents.length > 0 ? `${allAgents.length} agents available` : 'No agents available'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {allAgents.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {allAgents.map((agent) => (
+                          <div 
+                            key={agent.name}
+                            className="card" 
+                            style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: 'var(--spacing-md)',
+                              background: 'var(--color-bg-secondary)',
+                              border: '1px solid var(--color-border-primary)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => startStandaloneChat(agent)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}>
+                              <div>
+                                <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.125rem', fontWeight: '600' }}>
+                                  {agent.name}
+                                </h3>
+                                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0, fontFamily: 'var(--font-family-primary)' }}>
+                                  {agent.namespace}
+                                </p>
+                              </div>
+                              <div style={{
+                                width: '0.75rem',
+                                height: '0.75rem',
+                                borderRadius: '50%',
+                                background: agent.ready ? 'var(--color-success)' : 'var(--color-error)',
+                                border: '2px solid var(--color-bg-secondary)'
+                              }} />
+                            </div>
+                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                              {agent.description}
+                            </p>
+                            <button
+                              className="btn btn-primary"
+                              style={{
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                alignSelf: 'flex-start'
+                              }}
+                            >
+                              Start Chat
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: 'var(--spacing-xl)',
+                        color: 'var(--color-text-muted)',
+                        fontSize: '0.875rem'
+                      }}>
+                        <div style={{
+                          width: '3rem',
+                          height: '3rem',
+                          background: 'var(--color-bg-tertiary)',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto var(--spacing-md)',
+                          color: 'var(--color-text-muted)'
+                        }}>
+                          <MessageSquare style={{ width: '1.5rem', height: '1.5rem' }} />
+                        </div>
+                        <p style={{ margin: '0 0 var(--spacing-sm) 0', fontWeight: '600' }}>No Agents Available</p>
+                        <p style={{ margin: 0, fontSize: '0.75rem' }}>Connect to KAgent to see available agents</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -589,7 +796,7 @@ function App() {
                       <AgentCard
                         key={agent.name}
                         agent={agent}
-                        onSelect={() => setSelectedAgent(agent)}
+                        onSelect={() => handleAgentSelection(agent)}
                         isSelected={selectedAgent?.name === agent.name}
                       />
                     ))}
