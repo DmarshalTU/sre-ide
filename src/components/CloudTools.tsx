@@ -304,7 +304,7 @@ export function CloudTools({ onDebugInfo }: CloudToolsProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
       {/* Header */}
       <div className="card">
         <div className="card-header">
@@ -364,7 +364,7 @@ export function CloudTools({ onDebugInfo }: CloudToolsProps) {
             </button>
           </div>
           
-          <div className="grid grid-cols-2" style={{ gap: 'var(--spacing-lg)' }}>
+          <div className="cloud-tools-container grid grid-cols-1 md:grid-cols-2" style={{ gap: 'var(--spacing-lg)' }}>
             {/* Azure Resource Finder */}
             <div className="card" style={{ background: 'var(--color-bg-tertiary)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)' }}>
@@ -477,7 +477,7 @@ export function CloudTools({ onDebugInfo }: CloudToolsProps) {
       )}
 
       {/* Tool Status */}
-      <div className="grid grid-cols-2">
+              <div className="cloud-tools-container grid grid-cols-1 md:grid-cols-2">
         <div className="metric-card">
           <div className="metric-icon" style={{ 
             background: azureToolInfo?.available ? 'var(--color-success)20' : 'var(--color-error)20',

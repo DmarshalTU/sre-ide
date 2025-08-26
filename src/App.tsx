@@ -100,6 +100,16 @@ function App() {
     setDebugInfo(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 49)])
   }, [])
 
+  // Listen for tab switching events from investigation
+  useEffect(() => {
+    const handleSwitchToChat = () => {
+      setActiveTab('chat')
+    }
+
+    window.addEventListener('switchToChat', handleSwitchToChat)
+    return () => window.removeEventListener('switchToChat', handleSwitchToChat)
+  }, [])
+
   // Connect to a KAgent instance
   const connectToConnector = async (connector: KAgentConnector) => {
     try {
@@ -177,8 +187,8 @@ function App() {
     addDebugInfo(`🗑️ Removed connector: ${connectors.find(c => c.id === connectorId)?.name}`)
   }
 
-  // Start a chat session with an agent
-  const startChatWithAgent = async (agent: KagentAgent) => {
+  // Start a chat session with an agent (without switching tabs)
+  const startChatWithAgentSilent = async (agent: KagentAgent) => {
     if (!currentConnectorAPI) {
       addDebugInfo('❌ No active connector available')
       return
@@ -200,7 +210,7 @@ function App() {
       setChatMessages(messages)
       
       addDebugInfo(`✅ Chat session created: ${session.id}`)
-      setActiveTab('chat')
+      // Don't switch tabs - keep current tab active
     } catch (error) {
       console.error('Failed to start chat:', error)
       addDebugInfo(`❌ Failed to start chat: ${error}`)
@@ -214,6 +224,12 @@ function App() {
         sessionId: 'error'
       }])
     }
+  }
+
+  // Start a chat session with an agent (and switch to chat tab)
+  const startChatWithAgent = async (agent: KagentAgent) => {
+    await startChatWithAgentSilent(agent)
+    setActiveTab('chat')
   }
 
   // Send a message to the current chat session
@@ -479,7 +495,7 @@ function App() {
                     <div className="card-header">
                       <h2 className="card-title">System Metrics</h2>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="dashboard-grid grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="metric-card">
                         <div className="metric-icon" style={{ 
                           background: 'var(--color-primary)20',
@@ -526,7 +542,7 @@ function App() {
                     <div className="card-header">
                       <h2 className="card-title">Quick Actions</h2>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="dashboard-grid grid grid-cols-1 md:grid-cols-3 gap-4">
                       <QuickActionButton
                         icon={<MessageSquare />}
                         label="Start Chat"
@@ -754,7 +770,7 @@ function App() {
               <div className="slide-in-right">
                 <Investigation 
                   agents={allAgents}
-                  onStartChat={startChatWithAgent}
+                  onStartChat={startChatWithAgentSilent}
                   onDebugInfo={addDebugInfo}
                   chatMessages={chatMessages}
                 />
@@ -791,7 +807,7 @@ function App() {
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="agents-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {allAgents.map((agent) => (
                       <AgentCard
                         key={agent.name}

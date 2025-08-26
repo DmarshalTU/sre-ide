@@ -2,7 +2,7 @@ import { useState, useEffect, memo } from 'react'
 import { 
   Search, AlertTriangle, BarChart3, Database, Network, 
   Shield, Cpu, FileText, ChevronRight, Download, Play, 
-  Clock, CheckCircle, XCircle, Loader2
+  Clock, CheckCircle, XCircle, Loader2, MessageSquare
 } from 'lucide-react'
 
 interface InvestigationTemplate {
@@ -1221,20 +1221,47 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
                 Step {currentStep + 1} of {activeInvestigation.agents.length}
               </p>
             </div>
-            <button
-              onClick={nextStep}
-              disabled={currentStep >= activeInvestigation.agents.length - 1}
-              className="btn btn-primary"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-sm)',
-                fontSize: '0.875rem'
-              }}
-            >
-              <ChevronRight style={{ width: '1rem', height: '1rem' }} />
-              Next Agent
-            </button>
+            <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+              <button
+                onClick={() => {
+                  // Go to chat with current agent
+                  const currentAgentName = activeInvestigation.agents[currentStep]
+                  const currentAgent = agents.find(a => 
+                    a.name === currentAgentName || 
+                    a.name.toLowerCase().includes(currentAgentName.toLowerCase())
+                  )
+                  if (currentAgent) {
+                    onStartChat(currentAgent)
+                    // Switch to chat tab
+                    window.dispatchEvent(new CustomEvent('switchToChat'))
+                  }
+                }}
+                className="btn btn-success"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-sm)',
+                  fontSize: '0.875rem'
+                }}
+              >
+                <MessageSquare style={{ width: '1rem', height: '1rem' }} />
+                Go to Chat
+              </button>
+              <button
+                onClick={nextStep}
+                disabled={currentStep >= activeInvestigation.agents.length - 1}
+                className="btn btn-primary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-sm)',
+                  fontSize: '0.875rem'
+                }}
+              >
+                <ChevronRight style={{ width: '1rem', height: '1rem' }} />
+                Next Agent
+              </button>
+            </div>
           </div>
         </div>
       )}

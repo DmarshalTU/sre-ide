@@ -92,13 +92,17 @@ body {
   margin-left: 280px;
   display: flex;
   flex-direction: column;
+  min-width: 0; /* Allow content to shrink */
+  width: calc(100vw - 280px);
 }
 
 .content-area {
   margin-top: 64px;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg);
   flex: 1;
-  overflow: auto;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Sidebar styles */
@@ -941,12 +945,33 @@ textarea:focus {
     --spacing-xl: 1.25rem;
   }
   
+  .main-content {
+    margin-left: 0;
+    width: 100vw;
+  }
+  
+  .content-area {
+    padding: var(--spacing-md);
+  }
+  
   .card {
     padding: var(--spacing-md);
   }
   
   .metric-card {
     padding: var(--spacing-sm);
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .cloud-tools-container {
+    grid-template-columns: 1fr;
   }
 }
 
