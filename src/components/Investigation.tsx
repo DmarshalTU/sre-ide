@@ -489,34 +489,50 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
         if (assistantMessages.length > 0) {
           const lastMessage = assistantMessages[assistantMessages.length - 1]
           if (lastMessage && lastMessage.content) {
-            // Extract first few sentences as summary
-            const sentences = lastMessage.content.split(/[.!?]+/).slice(0, 2)
-            return sentences.join('. ').trim() + '.'
+            // Extract first few sentences as summary, but make it more specific
+            const content = lastMessage.content
+            // Look for the main topic or first meaningful sentence
+            const sentences = content.split(/[.!?]+/).filter((s: string) => s.trim().length > 10)
+            if (sentences.length > 0) {
+              // Take the first meaningful sentence that's not just formatting
+              const firstSentence = sentences[0].trim()
+              if (firstSentence.length > 20) {
+                return firstSentence + '.'
+              }
+            }
+            // Fallback to first 100 characters
+            return content.substring(0, 100).trim() + (content.length > 100 ? '...' : '')
           }
         }
         return `Conversation recorded with ${agentMessages.length} messages`
       }
     }
     
-    // Fallback to current chat messages if no integrated sessions
-    const messagesToUse = activeInvestigation?.chatMessages || chatMessages || []
-    if (!messagesToUse || messagesToUse.length === 0) {
-      return 'No conversation data available'
-    }
-
-    // If we have any assistant messages, assume the agent was used
-    const assistantMessages = messagesToUse.filter((msg: any) => msg.role === 'assistant')
-    if (assistantMessages.length > 0) {
-      const lastMessage = assistantMessages[assistantMessages.length - 1]
-      if (lastMessage && lastMessage.content) {
-        // Extract first few sentences as summary
-        const sentences = lastMessage.content.split(/[.!?]+/).slice(0, 2)
-        return sentences.join('. ').trim() + '.'
+    // Check if we have agent-specific chat sessions
+    if (agentChatSessions && agentChatSessions[agentName]) {
+      const session = agentChatSessions[agentName]
+      if (session.messages && session.messages.length > 0) {
+        const assistantMessages = session.messages.filter((msg: any) => msg.role === 'assistant')
+        if (assistantMessages.length > 0) {
+          const lastMessage = assistantMessages[assistantMessages.length - 1]
+          if (lastMessage && lastMessage.content) {
+            const content = lastMessage.content
+            const sentences = content.split(/[.!?]+/).filter((s: string) => s.trim().length > 10)
+            if (sentences.length > 0) {
+              const firstSentence = sentences[0].trim()
+              if (firstSentence.length > 20) {
+                return firstSentence + '.'
+              }
+            }
+            return content.substring(0, 100).trim() + (content.length > 100 ? '...' : '')
+          }
+        }
+        return `Conversation recorded with ${session.messages.length} messages`
       }
-      return 'Conversation recorded with this agent'
-    } else {
-      return 'Not used in this investigation'
     }
+    
+    // If no agent-specific data found
+    return 'No conversation data available for this agent'
   }
 
   const exportInvestigationReport = async (investigation: any, format: 'json' | 'pdf' = 'json') => {
