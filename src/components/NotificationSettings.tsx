@@ -1,12 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Bell, 
   BellOff, 
   Volume2, 
   VolumeX, 
-  Eye, 
-  EyeOff,
-  Settings,
   CheckCircle,
   XCircle,
   AlertTriangle,

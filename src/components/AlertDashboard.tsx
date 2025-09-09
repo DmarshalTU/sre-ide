@@ -25,6 +25,8 @@ interface AlertDashboardProps {
 }
 
 export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: AlertDashboardProps) {
+  console.log('AlertDashboard: Component rendering', { kagentApi })
+  
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [summary, setSummary] = useState<AlertSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,22 +54,26 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
 
   const loadData = async (isRefresh = false) => {
     try {
+      console.log('AlertDashboard: loadData called', { isRefresh })
       if (!isRefresh) {
         setLoading(true)
       }
       setError(null)
       
+      console.log('AlertDashboard: About to call kagentApi.getAlerts()')
       // Load alerts and summary in parallel with better error handling
       const [alertsData, summaryData] = await Promise.all([
         kagentApi.getAlerts().catch((err) => {
-          console.error('Failed to load alerts:', err)
+          console.error('AlertDashboard: Failed to load alerts:', err)
           return []
         }),
         kagentApi.getAlertSummary().catch((err) => {
-          console.error('Failed to load alert summary:', err)
+          console.error('AlertDashboard: Failed to load alert summary:', err)
           return null
         })
       ])
+      
+      console.log('AlertDashboard: Got data', { alertsData, summaryData })
       
       setAlerts(alertsData)
       setSummary(summaryData)
@@ -124,13 +130,13 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
     }
   }
 
-  const stopStreaming = () => {
-    if (eventSource) {
-      eventSource.close()
-      setEventSource(null)
-      setIsStreaming(false)
-    }
-  }
+  // const stopStreaming = () => {
+  //   if (eventSource) {
+  //     eventSource.close()
+  //     setEventSource(null)
+  //     setIsStreaming(false)
+  //   }
+  // }
 
   const handleStartChatWithAgent = (agentId: string, alert?: Alert) => {
     console.log('🔍 Chat button clicked!', { agentId, alert })

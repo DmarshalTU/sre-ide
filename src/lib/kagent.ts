@@ -240,19 +240,42 @@ export class KagentAPI {
     if (customBaseUrl) {
       baseUrl = customBaseUrl
     } else {
-      // Use proxy in development to avoid CORS issues
-      baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-        ? '/api' // Use proxy path for development
-        : this.baseUrl
+      // Check if we're in Tauri (desktop app) or web development
+      const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__
+      const isWebDev = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      
+      console.log('Environment detection:', { isTauri, isWebDev, hostname: window.location?.hostname })
+      
+      if (isTauri) {
+        // In Tauri app, use the full base URL
+        baseUrl = this.baseUrl
+        console.log('Using Tauri base URL:', baseUrl)
+      } else if (isWebDev) {
+        // In web development, use proxy path
+        baseUrl = '/api'
+        console.log('Using web dev proxy URL:', baseUrl)
+      } else {
+        // Fallback to base URL
+        baseUrl = this.baseUrl
+        console.log('Using fallback base URL:', baseUrl)
+      }
     }
     
     // Only add user_id for KAgent requests, not khook requests
     const url = customBaseUrl 
-      ? `${baseUrl}${endpoint}`
+      ? `${customBaseUrl}${endpoint}`
       : `${baseUrl}${endpoint}?user_id=${this.userId}`
     
     console.log(`Making request to: ${url}`)
     console.log('Request options:', { method: options.method, body: options.body })
+    console.log('URL details:', {
+      url,
+      isAbsolute: url.startsWith('http'),
+      hasProtocol: url.includes('://'),
+      baseUrl,
+      endpoint,
+      customBaseUrl
+    })
     
     try {
       // Use Tauri invoke for desktop app, fetch for web
@@ -278,12 +301,19 @@ export class KagentAPI {
         }
         
         console.log('Request headers:', headers)
+        console.log('Tauri invoke - URL being passed to Rust:', url)
+        console.log('Tauri invoke - URL type check:', {
+          url,
+          isAbsolute: url.startsWith('http'),
+          hasProtocol: url.includes('://'),
+          length: url.length
+        })
         
         const result = await invoke<any>('http_request', {
           url: url,
           method: options.method || 'GET',
           headers: headers,
-          body: options.body || null
+          body: options.body ? String(options.body) : null
         })
         
         console.log('Tauri invoke result:', result)
@@ -885,9 +915,15 @@ export class KagentAPI {
         console.log('Using fallback agent name:', agentName)
       }
       
-      // Use the correct A2A URL format
-      const a2aUrl = `${this.baseUrl.replace('/api', '')}/api/a2a/${namespace}/${agentName}/`
+      // Use the correct A2A URL format - ensure we have a proper base URL
+      const baseUrl = this.baseUrl.replace('/api', '')
+      const a2aUrl = `${baseUrl}/api/a2a/${namespace}/${agentName}/`
       console.log(`Using A2A URL: ${a2aUrl}`)
+      
+      // Ensure the URL is absolute
+      if (!a2aUrl.startsWith('http')) {
+        throw new Error(`Invalid A2A URL: ${a2aUrl} - URL must be absolute`)
+      }
       
       // Use the correct JSON-RPC format
       const a2aData = {
@@ -1076,10 +1112,10 @@ export class KagentAPI {
   // Hook CRD Management Methods
   async getHooks(): Promise<Hook[]> {
     try {
-      // Use proxy path for khook API in development
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api' // Use proxy path for development
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
+      
+      console.log('Khook API - Using hardcoded URL:', khookBaseUrl)
       console.log('Fetching hooks from khook API:', `${khookBaseUrl}/api/hooks`)
       const response = await this.request<HookList>('/api/hooks', { method: 'GET' }, khookBaseUrl)
       return response.items || []
@@ -1091,9 +1127,17 @@ export class KagentAPI {
 
   async getHook(name: string, namespace: string = 'default'): Promise<Hook> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      const isWebDev = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      
+      console.log('Hook API - Environment detection:', { isWebDev, hostname: window.location?.hostname })
+      
+      const khookBaseUrl = isWebDev
         ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+        : 'http://localhost:8082'
+      
+      console.log('Hook API - Khook base URL:', khookBaseUrl)
+      console.log('Hook API - Full URL will be:', `${khookBaseUrl}/api/hooks/${namespace}/${name}`)
+      
       const response = await this.request<Hook>(`/api/hooks/${namespace}/${name}`, { method: 'GET' }, khookBaseUrl)
       return response
     } catch (error) {
@@ -1104,9 +1148,8 @@ export class KagentAPI {
 
   async createHook(hook: Hook): Promise<Hook> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
       const response = await this.request<Hook>('/api/hooks', {
         method: 'POST',
         body: JSON.stringify(hook)
@@ -1120,9 +1163,8 @@ export class KagentAPI {
 
   async updateHook(name: string, namespace: string, hook: Hook): Promise<Hook> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
       const response = await this.request<Hook>(`/api/hooks/${namespace}/${name}`, {
         method: 'PUT',
         body: JSON.stringify(hook)
@@ -1136,9 +1178,8 @@ export class KagentAPI {
 
   async deleteHook(name: string, namespace: string = 'default'): Promise<void> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
       await this.request(`/api/hooks/${namespace}/${name}`, { method: 'DELETE' }, khookBaseUrl)
     } catch (error) {
       console.error(`Failed to delete hook ${name}:`, error)
@@ -1149,9 +1190,12 @@ export class KagentAPI {
   // Alert Management Methods
   async getAlerts(): Promise<Alert[]> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
+      
+      console.log('Alerts API - Using hardcoded URL:', khookBaseUrl)
+      
+      console.log('Alerts API - Using base URL:', khookBaseUrl)
       console.log('Fetching alerts from khook API:', `${khookBaseUrl}/api/alerts`)
       const response = await this.request<{data: Alert[]}>('/api/alerts', { method: 'GET' }, khookBaseUrl)
       return response?.data || []
@@ -1163,9 +1207,10 @@ export class KagentAPI {
 
   async getAlertSummary(): Promise<AlertSummary> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
+      
+      console.log('Alert Summary API - Using hardcoded URL:', khookBaseUrl)
       const response = await this.request<{data: AlertSummary}>('/api/alerts/summary', { method: 'GET' }, khookBaseUrl)
       return response?.data || { total: 0, pending: 0, acknowledged: 0, resolved: 0, critical: 0, warning: 0, info: 0 }
     } catch (error) {
@@ -1176,9 +1221,8 @@ export class KagentAPI {
 
   async acknowledgeAlert(alertId: string): Promise<void> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
       await this.request(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' }, khookBaseUrl)
     } catch (error) {
       console.error(`Failed to acknowledge alert ${alertId}:`, error)
@@ -1188,9 +1232,8 @@ export class KagentAPI {
 
   async resolveAlert(alertId: string): Promise<void> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
       await this.request(`/api/alerts/${alertId}/resolve`, { method: 'POST' }, khookBaseUrl)
     } catch (error) {
       console.error(`Failed to resolve alert ${alertId}:`, error)
@@ -1201,10 +1244,14 @@ export class KagentAPI {
   // Real-time Alert Streaming
   async subscribeToAlerts(onAlert: (alert: Alert) => void, onError?: (error: Error) => void): Promise<EventSource> {
     try {
-      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? '/khook-api'
-        : this.baseUrl.replace(':8083', ':8082')
-      const eventSource = new EventSource(`${khookBaseUrl}/api/alerts/stream`)
+      // Simplified approach - always use absolute URL for khook API
+      const khookBaseUrl = 'http://localhost:8082'
+      
+      console.log('Alert Streaming - Using hardcoded URL:', khookBaseUrl)
+      const streamUrl = `${khookBaseUrl}/api/alerts/stream`
+      console.log('Alert Streaming - Full URL:', streamUrl)
+      
+      const eventSource = new EventSource(streamUrl)
       
       eventSource.addEventListener('alert', (event) => {
         try {
@@ -1216,7 +1263,7 @@ export class KagentAPI {
         }
       })
 
-      eventSource.addEventListener('heartbeat', (event) => {
+      eventSource.addEventListener('heartbeat', () => {
         // Heartbeat, ignore
         return
       })

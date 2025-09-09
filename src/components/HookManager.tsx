@@ -7,7 +7,6 @@ import {
   Edit, 
   Eye, 
   Copy,
-  CheckCircle,
   XCircle,
   AlertTriangle,
   Clock,
@@ -21,6 +20,8 @@ interface HookManagerProps {
 }
 
 export default function HookManager({ kagentApi }: HookManagerProps) {
+  console.log('HookManager: Component rendering', { kagentApi })
+  
   const [hooks, setHooks] = useState<Hook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,16 +30,21 @@ export default function HookManager({ kagentApi }: HookManagerProps) {
   const [viewingHook, setViewingHook] = useState<Hook | null>(null)
 
   useEffect(() => {
+    console.log('HookManager: useEffect triggered, calling loadHooks()')
     loadHooks()
   }, [])
 
   const loadHooks = async () => {
     try {
+      console.log('HookManager: loadHooks called')
       setLoading(true)
       setError(null)
+      console.log('HookManager: About to call kagentApi.getHooks()')
       const hooksList = await kagentApi.getHooks()
+      console.log('HookManager: Got hooks data', { hooksList })
       setHooks(hooksList)
     } catch (err) {
+      console.error('HookManager: Failed to load hooks:', err)
       setError(err instanceof Error ? err.message : 'Failed to load hooks')
     } finally {
       setLoading(false)

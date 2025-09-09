@@ -84,6 +84,28 @@ function App() {
   const currentConnector = connectors.find(c => c.id === activeConnector)
   const currentConnectorAPI = currentConnector ? new KagentAPI(currentConnector.config) : null
   
+  console.log('App: Connector state', { 
+    activeTab,
+    activeConnector, 
+    connectorsCount: connectors.length, 
+    currentConnector: !!currentConnector, 
+    currentConnectorAPI: !!currentConnectorAPI,
+    connectors: connectors.map(c => ({ id: c.id, name: c.name, connected: c.status.connected }))
+  })
+  
+  // Debug why currentConnectorAPI might be null
+  if (!currentConnectorAPI) {
+    console.log('App: currentConnectorAPI is null!', {
+      activeConnector,
+      currentConnector: currentConnector ? {
+        id: currentConnector.id,
+        name: currentConnector.name,
+        config: currentConnector.config
+      } : null,
+      connectors: connectors.map(c => ({ id: c.id, name: c.name, connected: c.status.connected }))
+    })
+  }
+  
   // Aggregate all agents from all connectors
   const allAgents = connectors.flatMap(c => c.agents)
   
@@ -95,6 +117,7 @@ function App() {
 
   // Initialize default connector on mount
   useEffect(() => {
+    console.log('App: Initializing default connector')
     const defaultConnector: KAgentConnector = {
       id: 'default',
       name: 'Default KAgent',
@@ -103,8 +126,10 @@ function App() {
       agents: [],
       isActive: true
     }
+    console.log('App: Setting connectors and activeConnector', { defaultConnector })
     setConnectors([defaultConnector])
     setActiveConnector('default')
+    console.log('App: Calling connectToConnector')
     connectToConnector(defaultConnector)
   }, [])
 
@@ -154,9 +179,13 @@ function App() {
   // Connect to a KAgent instance
   const connectToConnector = async (connector: KAgentConnector) => {
     try {
+      console.log('App: connectToConnector called', { connector })
       addDebugInfo(`🔄 Connecting to ${connector.name}...`)
       const api = new KagentAPI(connector.config)
+      console.log('App: Created KagentAPI instance', { api })
+      console.log('App: About to call api.getAgents()')
       const agents = await api.getAgents()
+      console.log('App: Got agents', { agents })
       
       setConnectors(prev => prev.map(c => 
         c.id === connector.id 
@@ -173,6 +202,7 @@ function App() {
       
       addDebugInfo(`✅ Connected to ${connector.name}! Found ${agents.length} agents`)
     } catch (error) {
+      console.error('App: connectToConnector failed', { connector, error })
       console.error(`Failed to connect to ${connector.name}:`, error)
       
       setConnectors(prev => prev.map(c => 
@@ -528,7 +558,10 @@ Please analyze this alert and provide recommendations for resolution. The alert 
     <div className="app-container">
       <Sidebar 
         activeTab={activeTab} 
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          console.log('App: Tab changing from', activeTab, 'to', tab)
+          setActiveTab(tab)
+        }}
         connectionStatus={overallConnectionStatus}
       />
       
@@ -989,18 +1022,50 @@ Please analyze this alert and provide recommendations for resolution. The alert 
               </div>
             )}
 
-            {activeTab === 'alerts' && currentConnectorAPI && (
+            {activeTab === 'alerts' && currentConnectorAPI && (() => {
+              console.log('App: Rendering AlertDashboard with currentConnectorAPI')
+              return (
+                <div className="slide-in-right">
+                  <AlertDashboard 
+                    kagentApi={currentConnectorAPI} 
+                    onStartChatWithAgent={startChatWithAgentById}
+                  />
+                </div>
+              )
+            })()}
+
+            {activeTab === 'hooks' && currentConnectorAPI && (() => {
+              console.log('App: Rendering HookManager with currentConnectorAPI')
+              return (
+                <div className="slide-in-right">
+                  <HookManager kagentApi={currentConnectorAPI} />
+                </div>
+              )
+            })()}
+            
+            {activeTab === 'alerts' && !currentConnectorAPI && (
               <div className="slide-in-right">
-                <AlertDashboard 
-                  kagentApi={currentConnectorAPI} 
-                  onStartChatWithAgent={startChatWithAgentById}
-                />
+                <div className="card">
+                  <div className="card-header">
+                    <h2 className="card-title">Alerts - No Connector</h2>
+                  </div>
+                  <div className="card-content">
+                    <p>No active connector available. Please connect to a KAgent instance first.</p>
+                  </div>
+                </div>
               </div>
             )}
-
-            {activeTab === 'hooks' && currentConnectorAPI && (
+            
+            {activeTab === 'hooks' && !currentConnectorAPI && (
               <div className="slide-in-right">
-                <HookManager kagentApi={currentConnectorAPI} />
+                <div className="card">
+                  <div className="card-header">
+                    <h2 className="card-title">Hooks - No Connector</h2>
+                  </div>
+                  <div className="card-content">
+                    <p>No active connector available. Please connect to a KAgent instance first.</p>
+                  </div>
+                </div>
               </div>
             )}
 
