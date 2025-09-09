@@ -2,6 +2,7 @@
 
 // Agent information interface
 export interface KagentAgent {
+  id: string
   name: string
   namespace: string
   type: string
@@ -43,6 +44,165 @@ export interface KagentEvent {
   timestamp: string
 }
 
+// Tool Server interfaces
+export interface DiscoveredTool {
+  name: string
+  description: string
+}
+
+export interface ToolServer {
+  ref: string
+  groupKind: string
+  discoveredTools: DiscoveredTool[]
+}
+
+export interface ToolServerCreateRequest {
+  type: 'RemoteMCPServer' | 'MCPServer'
+  remoteMCPServer?: any
+  mcpServer?: any
+}
+
+// Memory interfaces
+export interface Memory {
+  ref: string
+  providerName: string
+  apiKeySecretRef: string
+  apiKeySecretKey: string
+  memoryParams: Record<string, any>
+}
+
+export interface CreateMemoryRequest {
+  ref: string
+  provider: {
+    type: string
+  }
+  apiKey: string
+  pineconeParams?: any
+}
+
+// Task interfaces
+export interface Task {
+  id: string
+  sessionId: string
+  status: string
+  metadata?: any
+  history?: any[]
+}
+
+// Feedback interfaces
+export interface Feedback {
+  id: string
+  messageId: number
+  feedbackText: string
+  isPositive: boolean
+  issueType?: string
+  userId: string
+  createdAt: string
+}
+
+// Session Analytics interfaces
+export interface SessionAnalytics {
+  sessionId: string
+  totalMessages: number
+  totalTokens: number
+  duration: number
+  toolsUsed: string[]
+  successRate: number
+  createdAt: string
+  lastActivity: string
+}
+
+// Model Config interfaces
+export interface ModelConfig {
+  ref: string
+  providerName: string
+  model: string
+  apiKeySecretRef: string
+  apiKeySecretKey: string
+  modelParams?: Record<string, any>
+}
+
+// Hook CRD interfaces (from khook)
+export interface EventConfiguration {
+  eventType: 'pod-restart' | 'pod-pending' | 'oom-kill' | 'probe-failed'
+  agentId: string
+  prompt: string
+}
+
+export interface ActiveEventStatus {
+  eventType: string
+  resourceName: string
+  firstSeen: string
+  lastSeen: string
+  status: 'firing' | 'resolved'
+}
+
+export interface HookStatus {
+  activeEvents?: ActiveEventStatus[]
+  lastUpdated?: string
+}
+
+export interface Hook {
+  apiVersion: string
+  kind: string
+  metadata: {
+    name: string
+    namespace: string
+    creationTimestamp?: string
+    uid?: string
+  }
+  spec: {
+    eventConfigurations: EventConfiguration[]
+  }
+  status?: HookStatus
+}
+
+export interface HookList {
+  apiVersion: string
+  kind: string
+  metadata: {
+    resourceVersion: string
+  }
+  items: Hook[]
+}
+
+// Alert interfaces
+export interface Alert {
+  id: string
+  hookName: string
+  namespace: string
+  eventType: string
+  resourceName: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  status: 'firing' | 'resolved' | 'acknowledged'
+  firstSeen: string
+  lastSeen: string
+  message: string
+  agentId: string
+  sessionId?: string
+  taskId?: string
+  remediationStatus?: 'pending' | 'in_progress' | 'completed' | 'failed'
+}
+
+export interface AlertSummary {
+  total: number
+  firing: number
+  resolved: number
+  acknowledged: number
+  bySeverity: {
+    critical: number
+    high: number
+    medium: number
+    low: number
+  }
+  byEventType: {
+    'pod-restart': number
+    'pod-pending': number
+    'oom-kill': number
+    'probe-failed': number
+  }
+}
+
 // Main KAgent API client class
 export class KagentAPI {
   private baseUrl: string
@@ -74,8 +234,22 @@ export class KagentAPI {
   }
 
   // Generic request method with Tauri support
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}?user_id=${this.userId}`
+  private async request<T>(endpoint: string, options: RequestInit = {}, customBaseUrl?: string): Promise<T> {
+    // Use custom base URL if provided, otherwise use default logic
+    let baseUrl: string
+    if (customBaseUrl) {
+      baseUrl = customBaseUrl
+    } else {
+      // Use proxy in development to avoid CORS issues
+      baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? '/api' // Use proxy path for development
+        : this.baseUrl
+    }
+    
+    // Only add user_id for KAgent requests, not khook requests
+    const url = customBaseUrl 
+      ? `${baseUrl}${endpoint}`
+      : `${baseUrl}${endpoint}?user_id=${this.userId}`
     
     console.log(`Making request to: ${url}`)
     console.log('Request options:', { method: options.method, body: options.body })
@@ -117,11 +291,14 @@ export class KagentAPI {
       } else {
         console.log('Running in browser, using fetch')
         
-        // Prepare headers
+        // Prepare headers - avoid custom headers that trigger CORS preflight
         const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'X-User-ID': this.userId,
+        }
+        
+        // Only add Content-Type for non-GET requests to avoid preflight
+        if (options.method && options.method !== 'GET') {
+          headers['Content-Type'] = 'application/json'
         }
         
         // Add authentication token if available
@@ -164,10 +341,413 @@ export class KagentAPI {
     }
   }
 
+  // ===== TOOL SERVER MANAGEMENT =====
+  
+  async getToolServers(): Promise<ToolServer[]> {
+    try {
+      console.log('Fetching tool servers from:', `${this.baseUrl}/toolservers`)
+      const response = await this.request<{ data: ToolServer[] }>('/toolservers', { method: 'GET' })
+      console.log('Raw tool servers response:', response)
+      
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get tool servers:', error)
+      return []
+    }
+  }
+
+  async createToolServer(toolServerRequest: ToolServerCreateRequest): Promise<ToolServer> {
+    try {
+      console.log('Creating tool server:', toolServerRequest)
+      const response = await this.request<{ data: ToolServer }>('/toolservers', {
+        method: 'POST',
+        body: JSON.stringify(toolServerRequest),
+      })
+      
+      return response.data
+    } catch (error) {
+      console.error('Failed to create tool server:', error)
+      throw error
+    }
+  }
+
+  async deleteToolServer(namespace: string, name: string): Promise<void> {
+    try {
+      console.log(`Deleting tool server: ${namespace}/${name}`)
+      await this.request(`/toolservers/${namespace}/${name}`, {
+        method: 'DELETE',
+      })
+    } catch (error) {
+      console.error('Failed to delete tool server:', error)
+      throw error
+    }
+  }
+
+  // ===== MEMORY MANAGEMENT =====
+  
+  async getMemories(): Promise<Memory[]> {
+    try {
+      console.log('Fetching memories from:', `${this.baseUrl}/memories`)
+      const response = await this.request<{ data: Memory[] }>('/memories', { method: 'GET' })
+      console.log('Raw memories response:', response)
+      
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get memories:', error)
+      return []
+    }
+  }
+
+  async createMemory(memoryRequest: CreateMemoryRequest): Promise<Memory> {
+    try {
+      console.log('Creating memory:', memoryRequest)
+      const response = await this.request<{ data: Memory }>('/memories', {
+        method: 'POST',
+        body: JSON.stringify(memoryRequest),
+      })
+      
+      return response.data
+    } catch (error) {
+      console.error('Failed to create memory:', error)
+      throw error
+    }
+  }
+
+  async deleteMemory(namespace: string, name: string): Promise<void> {
+    try {
+      console.log(`Deleting memory: ${namespace}/${name}`)
+      await this.request(`/memories/${namespace}/${name}`, {
+        method: 'DELETE',
+      })
+    } catch (error) {
+      console.error('Failed to delete memory:', error)
+      throw error
+    }
+  }
+
+  // ===== TASK MANAGEMENT =====
+  
+  async getTask(taskId: string): Promise<Task> {
+    try {
+      console.log('Fetching task:', taskId)
+      const response = await this.request<{ data: Task }>(`/tasks/${taskId}`)
+      return response.data
+    } catch (error) {
+      console.error('Failed to get task:', error)
+      throw error
+    }
+  }
+
+  async createTask(taskData: any): Promise<Task> {
+    try {
+      console.log('Creating task:', taskData)
+      const response = await this.request<{ data: Task }>('/tasks', {
+        method: 'POST',
+        body: JSON.stringify(taskData),
+      })
+      
+      return response.data
+    } catch (error) {
+      console.error('Failed to create task:', error)
+      throw error
+    }
+  }
+
+  async deleteTask(taskId: string): Promise<void> {
+    try {
+      console.log(`Deleting task: ${taskId}`)
+      await this.request(`/tasks/${taskId}`, {
+        method: 'DELETE',
+      })
+    } catch (error) {
+      console.error('Failed to delete task:', error)
+      throw error
+    }
+  }
+
+  // ===== FEEDBACK MANAGEMENT =====
+  
+  async submitFeedback(feedback: Omit<Feedback, 'id' | 'createdAt'>): Promise<void> {
+    try {
+      console.log('Submitting feedback:', feedback)
+      await this.request('/feedback', {
+        method: 'POST',
+        body: JSON.stringify(feedback),
+      })
+    } catch (error) {
+      console.error('Failed to submit feedback:', error)
+      throw error
+    }
+  }
+
+  async getFeedback(): Promise<Feedback[]> {
+    try {
+      console.log('Fetching feedback')
+      const response = await this.request<{ data: Feedback[] }>('/feedback')
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get feedback:', error)
+      return []
+    }
+  }
+
+  // ===== SESSION ANALYTICS =====
+  
+  async getSessionEvents(sessionId: string, limit?: number, after?: string): Promise<KagentEvent[]> {
+    try {
+      console.log('Fetching session events:', sessionId)
+      let url = `/sessions/${sessionId}`
+      const params = new URLSearchParams()
+      
+      if (limit) params.append('limit', limit.toString())
+      if (after) params.append('after', after)
+      
+      if (params.toString()) {
+        url += `?${params.toString()}`
+      }
+      
+      const response = await this.request<{ data: { session: KagentSession, events: KagentEvent[] } }>(url)
+      return response.data?.events || []
+    } catch (error) {
+      console.error('Failed to get session events:', error)
+      return []
+    }
+  }
+
+  async getSessionTasks(sessionId: string): Promise<Task[]> {
+    try {
+      console.log('Fetching session tasks:', sessionId)
+      const response = await this.request<{ data: Task[] }>(`/sessions/${sessionId}/tasks`)
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get session tasks:', error)
+      return []
+    }
+  }
+
+  async addEventToSession(sessionId: string, eventData: { id: string, data: string }): Promise<void> {
+    try {
+      console.log('Adding event to session:', sessionId, eventData)
+      await this.request(`/sessions/${sessionId}/events`, {
+        method: 'POST',
+        body: JSON.stringify(eventData),
+      })
+    } catch (error) {
+      console.error('Failed to add event to session:', error)
+      throw error
+    }
+  }
+
+  async getSessionsForAgent(namespace: string, agentName: string): Promise<KagentSession[]> {
+    try {
+      console.log(`Fetching sessions for agent: ${namespace}/${agentName}`)
+      const response = await this.request<{ data: KagentSession[] }>(`/sessions/agent/${namespace}/${agentName}`, { method: 'GET' })
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get sessions for agent:', error)
+      return []
+    }
+  }
+
+  // ===== MODEL CONFIG MANAGEMENT =====
+  
+  async getModelConfigs(): Promise<ModelConfig[]> {
+    try {
+      console.log('Fetching model configs')
+      const response = await this.request<{ data: ModelConfig[] }>('/modelconfigs')
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get model configs:', error)
+      return []
+    }
+  }
+
+  async getModelConfig(namespace: string, name: string): Promise<ModelConfig> {
+    try {
+      console.log(`Fetching model config: ${namespace}/${name}`)
+      const response = await this.request<{ data: ModelConfig }>(`/modelconfigs/${namespace}/${name}`)
+      return response.data
+    } catch (error) {
+      console.error('Failed to get model config:', error)
+      throw error
+    }
+  }
+
+  async createModelConfig(modelConfig: any): Promise<ModelConfig> {
+    try {
+      console.log('Creating model config:', modelConfig)
+      const response = await this.request<{ data: ModelConfig }>('/modelconfigs', {
+        method: 'POST',
+        body: JSON.stringify(modelConfig),
+      })
+      
+      return response.data
+    } catch (error) {
+      console.error('Failed to create model config:', error)
+      throw error
+    }
+  }
+
+  async updateModelConfig(namespace: string, name: string, modelConfig: any): Promise<ModelConfig> {
+    try {
+      console.log(`Updating model config: ${namespace}/${name}`)
+      const response = await this.request<{ data: ModelConfig }>(`/modelconfigs/${namespace}/${name}`, {
+        method: 'PUT',
+        body: JSON.stringify(modelConfig),
+      })
+      
+      return response.data
+    } catch (error) {
+      console.error('Failed to update model config:', error)
+      throw error
+    }
+  }
+
+  async deleteModelConfig(namespace: string, name: string): Promise<void> {
+    try {
+      console.log(`Deleting model config: ${namespace}/${name}`)
+      await this.request(`/modelconfigs/${namespace}/${name}`, {
+        method: 'DELETE',
+      })
+    } catch (error) {
+      console.error('Failed to delete model config:', error)
+      throw error
+    }
+  }
+
+  // ===== PROVIDERS AND MODELS =====
+  
+  async getProviders(): Promise<any[]> {
+    try {
+      console.log('Fetching providers')
+      const response = await this.request<{ data: any[] }>('/providers/models')
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get providers:', error)
+      return []
+    }
+  }
+
+  async getModels(): Promise<any[]> {
+    try {
+      console.log('Fetching models')
+      const response = await this.request<{ data: any[] }>('/models')
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get models:', error)
+      return []
+    }
+  }
+
+  // ===== NAMESPACES =====
+  
+  async getNamespaces(): Promise<string[]> {
+    try {
+      console.log('Fetching namespaces')
+      const response = await this.request<{ data: string[] }>('/namespaces')
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get namespaces:', error)
+      return []
+    }
+  }
+
+  // ===== LANGGRAPH CHECKPOINTS =====
+  
+  async saveCheckpoint(checkpointData: any): Promise<void> {
+    try {
+      console.log('Saving checkpoint:', checkpointData)
+      await this.request('/langgraph/checkpoints', {
+        method: 'POST',
+        body: JSON.stringify(checkpointData),
+      })
+    } catch (error) {
+      console.error('Failed to save checkpoint:', error)
+      throw error
+    }
+  }
+
+  async getCheckpoints(): Promise<any[]> {
+    try {
+      console.log('Fetching checkpoints')
+      const response = await this.request<{ data: any[] }>('/langgraph/checkpoints')
+      return response.data || []
+    } catch (error) {
+      console.error('Failed to get checkpoints:', error)
+      return []
+    }
+  }
+
+  async deleteCheckpoint(threadId: string): Promise<void> {
+    try {
+      console.log(`Deleting checkpoint: ${threadId}`)
+      await this.request(`/langgraph/checkpoints/${threadId}`, {
+        method: 'DELETE',
+      })
+    } catch (error) {
+      console.error('Failed to delete checkpoint:', error)
+      throw error
+    }
+  }
+
+  // ===== ANALYTICS AND INSIGHTS =====
+  
+  async getSessionAnalytics(sessionId: string): Promise<SessionAnalytics> {
+    try {
+      console.log('Calculating session analytics:', sessionId)
+      
+      // Get session events and tasks to calculate analytics
+      const [events, tasks] = await Promise.all([
+        this.getSessionEvents(sessionId),
+        this.getSessionTasks(sessionId)
+      ])
+      
+      const session = await this.getSession(sessionId)
+      if (!session) {
+        throw new Error('Session not found')
+      }
+      
+      // Calculate analytics
+      const totalMessages = events.length
+      const totalTokens = tasks.reduce((sum, task) => {
+        const usage = task.metadata?.kagent_usage_metadata
+        return sum + (usage?.totalTokenCount || 0)
+      }, 0)
+      
+      const toolsUsed = [...new Set(
+        tasks.flatMap(task => 
+          task.history?.filter((h: any) => h.kind === 'message')
+            .flatMap((h: any) => h.parts?.filter((p: any) => p.kind === 'data') || [])
+            .map((p: any) => p.metadata?.kagent_type === 'function_call' ? p.data?.name : null)
+            .filter(Boolean) || []
+        )
+      )]
+      
+      const createdAt = session.last_update_time || new Date().toISOString()
+      const lastActivity = events.length > 0 ? events[events.length - 1].timestamp : createdAt
+      
+      return {
+        sessionId,
+        totalMessages,
+        totalTokens,
+        duration: new Date(lastActivity).getTime() - new Date(createdAt).getTime(),
+        toolsUsed,
+        successRate: 0.85, // Placeholder - would need more sophisticated calculation
+        createdAt,
+        lastActivity
+      }
+    } catch (error) {
+      console.error('Failed to get session analytics:', error)
+      throw error
+    }
+  }
+
+  // ===== EXISTING METHODS =====
+
   async getAgents(): Promise<KagentAgent[]> {
     try {
       console.log('Fetching agents from:', `${this.baseUrl}/agents`)
-      const response = await this.request<any>('/agents')
+      const response = await this.request<any>('/agents', { method: 'GET' })
       console.log('Raw agents response:', response)
       
       // Handle different response formats
@@ -191,6 +771,7 @@ export class KagentAPI {
         const status = agent.status || {}
         
         return {
+          id: agent.id || metadata.name || agent.name || 'unknown',
           name: metadata.name || agent.name || 'Unknown',
           namespace: metadata.namespace || agent.namespace || 'kagent',
           type: spec.type || agent.type || 'Declarative',
@@ -209,7 +790,7 @@ export class KagentAPI {
 
   async getSessions(): Promise<KagentSession[]> {
     try {
-      const response = await this.request<{ data: KagentSession[] }>('/sessions')
+      const response = await this.request<{ data: KagentSession[] }>('/sessions', { method: 'GET' })
       return response.data || []
     } catch (error) {
       console.error('Failed to fetch sessions:', error)
@@ -489,6 +1070,166 @@ export class KagentAPI {
       
       console.log('Using mock session:', mockSession)
       return mockSession
+    }
+  }
+
+  // Hook CRD Management Methods
+  async getHooks(): Promise<Hook[]> {
+    try {
+      // Use proxy path for khook API in development
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api' // Use proxy path for development
+        : this.baseUrl.replace(':8083', ':8082')
+      console.log('Fetching hooks from khook API:', `${khookBaseUrl}/api/hooks`)
+      const response = await this.request<HookList>('/api/hooks', { method: 'GET' }, khookBaseUrl)
+      return response.items || []
+    } catch (error) {
+      console.error('Failed to get hooks:', error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async getHook(name: string, namespace: string = 'default'): Promise<Hook> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      const response = await this.request<Hook>(`/api/hooks/${namespace}/${name}`, { method: 'GET' }, khookBaseUrl)
+      return response
+    } catch (error) {
+      console.error(`Failed to get hook ${name}:`, error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async createHook(hook: Hook): Promise<Hook> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      const response = await this.request<Hook>('/api/hooks', {
+        method: 'POST',
+        body: JSON.stringify(hook)
+      }, khookBaseUrl)
+      return response
+    } catch (error) {
+      console.error('Failed to create hook:', error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async updateHook(name: string, namespace: string, hook: Hook): Promise<Hook> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      const response = await this.request<Hook>(`/api/hooks/${namespace}/${name}`, {
+        method: 'PUT',
+        body: JSON.stringify(hook)
+      }, khookBaseUrl)
+      return response
+    } catch (error) {
+      console.error(`Failed to update hook ${name}:`, error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async deleteHook(name: string, namespace: string = 'default'): Promise<void> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      await this.request(`/api/hooks/${namespace}/${name}`, { method: 'DELETE' }, khookBaseUrl)
+    } catch (error) {
+      console.error(`Failed to delete hook ${name}:`, error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  // Alert Management Methods
+  async getAlerts(): Promise<Alert[]> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      console.log('Fetching alerts from khook API:', `${khookBaseUrl}/api/alerts`)
+      const response = await this.request<{data: Alert[]}>('/api/alerts', { method: 'GET' }, khookBaseUrl)
+      return response?.data || []
+    } catch (error) {
+      console.error('Failed to get alerts:', error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async getAlertSummary(): Promise<AlertSummary> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      const response = await this.request<{data: AlertSummary}>('/api/alerts/summary', { method: 'GET' }, khookBaseUrl)
+      return response?.data || { total: 0, pending: 0, acknowledged: 0, resolved: 0, critical: 0, warning: 0, info: 0 }
+    } catch (error) {
+      console.error('Failed to get alert summary:', error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async acknowledgeAlert(alertId: string): Promise<void> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      await this.request(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' }, khookBaseUrl)
+    } catch (error) {
+      console.error(`Failed to acknowledge alert ${alertId}:`, error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  async resolveAlert(alertId: string): Promise<void> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      await this.request(`/api/alerts/${alertId}/resolve`, { method: 'POST' }, khookBaseUrl)
+    } catch (error) {
+      console.error(`Failed to resolve alert ${alertId}:`, error)
+      throw new Error(`Network error: ${error}`)
+    }
+  }
+
+  // Real-time Alert Streaming
+  async subscribeToAlerts(onAlert: (alert: Alert) => void, onError?: (error: Error) => void): Promise<EventSource> {
+    try {
+      const khookBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? '/khook-api'
+        : this.baseUrl.replace(':8083', ':8082')
+      const eventSource = new EventSource(`${khookBaseUrl}/api/alerts/stream`)
+      
+      eventSource.addEventListener('alert', (event) => {
+        try {
+          const alert: Alert = JSON.parse(event.data)
+          onAlert(alert)
+        } catch (error) {
+          console.error('Failed to parse alert event:', error)
+          onError?.(error as Error)
+        }
+      })
+
+      eventSource.addEventListener('heartbeat', (event) => {
+        // Heartbeat, ignore
+        return
+      })
+
+      eventSource.onerror = (error) => {
+        console.error('Alert stream error:', error)
+        onError?.(error as any)
+      }
+
+      return eventSource
+    } catch (error) {
+      console.error('Failed to subscribe to alerts:', error)
+      throw new Error(`Network error: ${error}`)
     }
   }
 

@@ -186,9 +186,19 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
     }
   ]
 
+  const clearInvestigation = () => {
+    setActiveInvestigation(null)
+    setCurrentStep(0)
+    localStorage.removeItem('sre-ide-active-investigation')
+    onDebugInfo?.('🧹 Cleared previous investigation data')
+  }
+
   const startInvestigation = async (template: InvestigationTemplate) => {
     setIsStartingInvestigation(true)
     setInvestigationError(null)
+    
+    // Clear any previous investigation data first
+    clearInvestigation()
     
     try {
       // Validate that we have agents available
@@ -263,6 +273,9 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
       onDebugInfo?.('Please select at least one agent for investigation')
       return
     }
+
+    // Clear any previous investigation data first
+    clearInvestigation()
 
     const investigation = {
       id: `inv-${Date.now()}`,
@@ -1288,6 +1301,21 @@ export const Investigation = memo(function Investigation({ agents, onStartChat, 
               >
                 <FileText style={{ width: '1rem', height: '1rem' }} />
                 Export JSON
+              </button>
+              <button
+                onClick={clearInvestigation}
+                className="btn btn-ghost"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-sm)',
+                  fontSize: '0.875rem',
+                  color: 'var(--color-text-muted)'
+                }}
+                title="Clear investigation data"
+              >
+                <XCircle style={{ width: '1rem', height: '1rem' }} />
+                Clear
               </button>
               <button
                 onClick={completeInvestigation}

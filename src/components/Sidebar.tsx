@@ -9,7 +9,10 @@ import {
   Settings,
   Cloud,
   ChevronRight,
-  Zap
+  Zap,
+  Server,
+  BarChart3,
+  Database
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -65,10 +68,38 @@ export function Sidebar({ activeTab, onTabChange, connectionStatus }: SidebarPro
       badge: 'NEW'
     },
     { 
+      id: 'tools', 
+      name: 'Tool Servers', 
+      icon: <Server />,
+      description: 'MCP tool server management',
+      badge: 'NEW'
+    },
+    { 
+      id: 'analytics', 
+      name: 'Analytics', 
+      icon: <BarChart3 />,
+      description: 'Session analytics and insights',
+      badge: 'NEW'
+    },
+    { 
+      id: 'memory', 
+      name: 'Memory', 
+      icon: <Database />,
+      description: 'Knowledge base management',
+      badge: 'NEW'
+    },
+    { 
       id: 'alerts', 
       name: 'Alerts', 
       icon: <Bell />,
       description: 'System alerts and notifications'
+    },
+    { 
+      id: 'hooks', 
+      name: 'Hooks', 
+      icon: <Zap />,
+      description: 'Kubernetes event monitoring hooks',
+      badge: 'NEW'
     },
     { 
       id: 'debug', 

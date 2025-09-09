@@ -4,6 +4,11 @@ import { Header } from './components/Header'
 import { CloudTools } from './components/CloudTools'
 import { EnhancedChat } from './components/EnhancedChat'
 import { Investigation } from './components/Investigation'
+import ToolServerManager from './components/ToolServerManager'
+import SessionAnalytics from './components/SessionAnalytics'
+import MemoryManager from './components/MemoryManager'
+import AlertDashboard from './components/AlertDashboard'
+import HookManager from './components/HookManager'
 import { getConfig, type KAgentConfig } from './config'
 import { KagentAPI } from './lib/kagent'
 import type { KagentAgent, KagentSession, ChatMessage } from './lib/kagent'
@@ -396,7 +401,12 @@ function App() {
   }
 
   // Start a standalone chat (not part of investigation)
-  const startStandaloneChat = async (agent: KagentAgent) => {
+  const startStandaloneChat = async (agent: KagentAgent, initialMessage?: string) => {
+    console.log('💬 startStandaloneChat called with:', { agent: agent.name, hasInitialMessage: !!initialMessage })
+    if (initialMessage) {
+      console.log('📨 Initial message:', initialMessage)
+    }
+    
     if (!currentConnectorAPI) {
       addDebugInfo('❌ No active connector available')
       return
@@ -413,11 +423,103 @@ function App() {
       const messages = await currentConnectorAPI.getSessionMessages(session.id)
       setChatMessages(messages)
       
+      // If we have an initial message, send it immediately
+      if (initialMessage) {
+        try {
+          await currentConnectorAPI.sendMessage(session.id, initialMessage)
+          // Refresh messages to show the initial message
+          const updatedMessages = await currentConnectorAPI.getSessionMessages(session.id)
+          setChatMessages(updatedMessages)
+          addDebugInfo(`📤 Sent initial alert context message`)
+        } catch (error) {
+          console.error('Failed to send initial message:', error)
+          addDebugInfo(`❌ Failed to send initial message: ${error}`)
+        }
+      }
+      
       addDebugInfo(`✅ Standalone chat session created: ${session.id}`)
       setActiveTab('chat')
     } catch (error) {
       console.error('Failed to start standalone chat:', error)
       addDebugInfo(`❌ Failed to start standalone chat: ${error}`)
+    }
+  }
+
+  // Start chat with agent by ID (for alerts)
+  const startChatWithAgentById = async (agentId: string, alertContext?: any) => {
+    console.log('🚀 startChatWithAgentById called with:', { agentId, alertContext })
+    addDebugInfo(`🚀 Starting chat with agent: ${agentId}`)
+    
+    if (!currentConnectorAPI) {
+      addDebugInfo('❌ No active connector available')
+      return
+    }
+
+    // Find agent by ID across all connectors
+    console.log('🔍 Available agents:', allAgents.map(a => ({ id: a.id, name: a.name })))
+    console.log('🎯 Looking for agent with ID:', agentId)
+    
+    // Convert kagent__NS__k8s_agent to k8s-agent format
+    let searchId = agentId
+    if (agentId.includes('kagent__NS__')) {
+      searchId = agentId.replace('kagent__NS__', '').replace('_agent', '')
+      console.log('🔄 Converted agent ID to:', searchId)
+    }
+    
+    // First try to match by exact ID, then by name, then by partial match
+    const agent = allAgents.find(a => {
+      const idMatch = a.id === agentId || a.id === searchId
+      const nameMatch = a.name === agentId || a.name === searchId
+      const partialIdMatch = (a.id && a.id.includes(searchId)) || (a.id && a.id.includes(agentId))
+      const partialNameMatch = (a.name && a.name.includes(searchId)) || (a.name && a.name.includes(agentId))
+      
+      const found = idMatch || nameMatch || partialIdMatch || partialNameMatch
+      if (found) {
+        console.log('🎯 Found match:', { 
+          agentId: a.id, 
+          agentName: a.name, 
+          searchId, 
+          originalId: agentId,
+          idMatch, nameMatch, partialIdMatch, partialNameMatch
+        })
+      }
+      return found
+    })
+    
+    console.log('✅ Found agent:', agent)
+    
+    if (!agent) {
+      addDebugInfo(`❌ Agent not found: ${agentId}`)
+      addDebugInfo(`Available agents: ${allAgents.map(a => `${a.id || 'no-id'}:${a.name || 'no-name'}`).join(', ')}`)
+      return
+    }
+
+    try {
+      addDebugInfo(`Starting chat with agent from alert: ${agent.id || agent.name}`)
+      
+      // If we have alert context, create a session with context
+      if (alertContext) {
+        console.log('📋 Alert context received:', alertContext)
+        const alertMessage = `🚨 ALERT CONTEXT:
+- Event Type: ${alertContext.eventType}
+- Resource: ${alertContext.resourceName}
+- Namespace: ${alertContext.namespace}
+- Severity: ${alertContext.severity}
+- Status: ${alertContext.status}
+- Message: ${alertContext.message}
+- First Seen: ${new Date(alertContext.firstSeen).toLocaleString()}
+
+Please analyze this alert and provide recommendations for resolution. The alert is currently ${alertContext.status} and requires attention.`
+
+        console.log('📝 Alert message created:', alertMessage)
+        // Start a session with the alert context
+        await startStandaloneChat(agent, alertMessage)
+      } else {
+        await startStandaloneChat(agent)
+      }
+    } catch (error) {
+      console.error('Failed to start chat with agent from alert:', error)
+      addDebugInfo(`❌ Failed to start chat with agent from alert: ${error}`)
     }
   }
 
@@ -866,6 +968,39 @@ function App() {
             {activeTab === 'cloud-tools' && (
               <div className="slide-in-right">
                 <CloudTools onDebugInfo={addDebugInfo} />
+              </div>
+            )}
+
+            {activeTab === 'tools' && currentConnectorAPI && (
+              <div className="slide-in-right">
+                <ToolServerManager kagentApi={currentConnectorAPI} />
+              </div>
+            )}
+
+            {activeTab === 'analytics' && currentConnectorAPI && (
+              <div className="slide-in-right">
+                <SessionAnalytics kagentApi={currentConnectorAPI} />
+              </div>
+            )}
+
+            {activeTab === 'memory' && currentConnectorAPI && (
+              <div className="slide-in-right">
+                <MemoryManager kagentApi={currentConnectorAPI} />
+              </div>
+            )}
+
+            {activeTab === 'alerts' && currentConnectorAPI && (
+              <div className="slide-in-right">
+                <AlertDashboard 
+                  kagentApi={currentConnectorAPI} 
+                  onStartChatWithAgent={startChatWithAgentById}
+                />
+              </div>
+            )}
+
+            {activeTab === 'hooks' && currentConnectorAPI && (
+              <div className="slide-in-right">
+                <HookManager kagentApi={currentConnectorAPI} />
               </div>
             )}
 
