@@ -25,7 +25,6 @@ interface AlertDashboardProps {
 }
 
 export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: AlertDashboardProps) {
-  console.log('AlertDashboard: Component rendering', { kagentApi })
   
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [summary, setSummary] = useState<AlertSummary | null>(null)
@@ -54,13 +53,11 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
 
   const loadData = async (isRefresh = false) => {
     try {
-      console.log('AlertDashboard: loadData called', { isRefresh })
       if (!isRefresh) {
         setLoading(true)
       }
       setError(null)
       
-      console.log('AlertDashboard: About to call kagentApi.getAlerts()')
       // Load alerts and summary in parallel with better error handling
       const [alertsData, summaryData] = await Promise.all([
         kagentApi.getAlerts().catch((err) => {
@@ -73,7 +70,6 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
         })
       ])
       
-      console.log('AlertDashboard: Got data', { alertsData, summaryData })
       
       setAlerts(alertsData)
       setSummary(summaryData)
@@ -139,9 +135,7 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
   // }
 
   const handleStartChatWithAgent = (agentId: string, alert?: Alert) => {
-    console.log('🔍 Chat button clicked!', { agentId, alert })
     if (onStartChatWithAgent) {
-      console.log('📞 Calling onStartChatWithAgent with:', { agentId, alert })
       onStartChatWithAgent(agentId, alert)
     } else {
       console.warn('❌ onStartChatWithAgent callback not provided')
@@ -500,7 +494,7 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
             <Filter style={{ width: '1rem', height: '1rem', color: 'var(--color-text-muted)' }} />
             <select
               value={filter}
-              onChange={(e) => setFilter(e.target.value as any)}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'firing' | 'resolved')}
               className="input"
               style={{ fontSize: '0.875rem' }}
             >
@@ -512,7 +506,7 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
 
           <select
             value={severityFilter}
-            onChange={(e) => setSeverityFilter(e.target.value as any)}
+            onChange={(e) => setSeverityFilter(e.target.value as 'all' | 'critical' | 'high' | 'medium' | 'low')}
             className="input"
             style={{ fontSize: '0.875rem' }}
           >
