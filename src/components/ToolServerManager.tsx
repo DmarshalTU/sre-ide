@@ -399,16 +399,8 @@ function CreateToolServerDialog({ kagentApi, onClose, onSuccess }: CreateToolSer
       const request: ToolServerCreateRequest = {
         type: serverType,
         remoteMCPServer: {
-          metadata: {
-            name: formData.name,
-            namespace: formData.namespace
-          },
-          spec: {
-            description: formData.description,
-            protocol: formData.protocol,
-            url: formData.url,
-            headersFrom: []
-          }
+          name: formData.name,
+          endpoint: formData.url
         }
       }
 

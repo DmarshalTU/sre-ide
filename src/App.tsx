@@ -1402,31 +1402,6 @@ Please analyze this alert and provide recommendations for resolution. The alert 
               </div>
             )}
 
-            {activeTab === 'alerts' && (
-              <div className="slide-in-right">
-                <div className="card">
-                  <div className="card-header">
-                    <h2 className="card-title">Alerts</h2>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                    <div style={{
-                      padding: 'var(--spacing-md)',
-                      background: 'var(--color-warning)10',
-                      border: '1px solid var(--color-warning)20',
-                      borderRadius: 'var(--radius-md)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--spacing-sm)'
-                    }}>
-                      <AlertTriangle style={{ width: '1rem', height: '1rem', color: 'var(--color-warning)' }} />
-                      <span style={{ fontSize: '0.875rem', color: 'var(--color-warning)' }}>
-                        No active alerts
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </main>
       </div>
