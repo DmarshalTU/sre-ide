@@ -156,7 +156,7 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
   const handleResolve = async (alertId: string) => {
     try {
       setActionLoading(alertId)
-      await kagentApi.acknowledgeAlert(alertId)
+      await kagentApi.resolveAlert(alertId)
       setAlerts(prev => prev.map(alert => 
         alert.id === alertId 
           ? { ...alert, status: 'resolved' as const }

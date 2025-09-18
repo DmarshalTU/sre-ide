@@ -987,7 +987,7 @@ export class KagentAPI {
                   const result = eventData.result || eventData
                   
                   // Look for the final message from the agent
-                  if (result.status?.message?.role === 'agent') {
+                  if ('status' in result && result.status?.message?.role === 'agent') {
                     lastMessage = result.status.message.parts?.[0]?.text || ''
                   }
                 } catch (parseError) {

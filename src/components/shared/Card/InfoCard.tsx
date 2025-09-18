@@ -1,6 +1,6 @@
 import React from 'react'
 import { BaseCard } from './BaseCard'
-import { LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 interface InfoCardProps {
   title: string

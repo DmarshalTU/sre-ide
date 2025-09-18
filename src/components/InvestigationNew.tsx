@@ -6,7 +6,7 @@ import {
   InvestigationHistory,
   CustomInvestigation,
   type InvestigationTemplate
-} from './Investigation'
+} from './Investigation/'
 
 interface Investigation {
   id: string
@@ -148,7 +148,7 @@ export const InvestigationNew: React.FC<InvestigationProps> = ({
         throw new Error('No agents available. Please check your connection.')
       }
       
-      const availableAgents = template.agents.filter(agentName => 
+      const availableAgents = template.agents.filter((agentName: string) => 
         agents.some(agent => agent.name === agentName || agent.name.toLowerCase().includes(agentName.toLowerCase()))
       )
       

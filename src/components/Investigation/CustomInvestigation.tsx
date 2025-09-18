@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Plus, X, Users, Play } from 'lucide-react'
+import { X, Users, Play } from 'lucide-react'
 import { BaseDialog, FormField, Input, TextArea } from '../shared'
 
 interface CustomInvestigationProps {

@@ -1,7 +1,7 @@
 import React from 'react'
 import { 
-  Clock, CheckCircle, XCircle, MessageSquare, 
-  ChevronRight, AlertTriangle 
+  Clock, CheckCircle, MessageSquare,
+  ChevronRight
 } from 'lucide-react'
 
 interface Investigation {
@@ -38,7 +38,7 @@ export const InvestigationProgress: React.FC<InvestigationProgressProps> = ({
     return 'pending'
   }
 
-  const getStepIcon = (stepIndex: number, status: string) => {
+  const getStepIcon = (_stepIndex: number, status: string) => {
     switch (status) {
       case 'completed':
         return <CheckCircle size={20} className="text-green-500" />

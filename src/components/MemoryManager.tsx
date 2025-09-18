@@ -416,8 +416,8 @@ function CreateMemoryDialog({ kagentApi, onClose, onSuccess }: CreateMemoryDialo
         },
         apiKey: formData.apiKey,
         pineconeParams: formData.providerType === 'pinecone' ? {
-          environment: formData.environment,
-          indexName: formData.indexName
+          index: formData.indexName,
+          environment: formData.environment
         } : undefined
       }
 
