@@ -169,7 +169,9 @@ export interface ModelConfig {
 // Hook CRD interfaces (from khook)
 export interface EventConfiguration {
   eventType: 'pod-restart' | 'pod-pending' | 'oom-kill' | 'probe-failed'
-  agentId: string
+  agentRef: {
+    name: string
+  }
   prompt: string
 }
 
@@ -1089,10 +1091,10 @@ export class KagentAPI {
   // Hook CRD Management Methods
   async getHooks(): Promise<Hook[]> {
     try {
-      // Simplified approach - always use absolute URL for khook API
+      // Use the new /api/v1/hooks endpoint consistently
       const khookBaseUrl = 'http://localhost:8082'
       
-      const response = await this.request<HookList>('/api/hooks', { method: 'GET' }, khookBaseUrl)
+      const response = await this.request<HookList>('/api/v1/hooks', { method: 'GET' }, khookBaseUrl)
       return response.items || []
     } catch (error) {
       throw new Error(`Network error: ${error}`)
@@ -1107,7 +1109,7 @@ export class KagentAPI {
         ? '/khook-api'
         : 'http://localhost:8082'
       
-      const response = await this.request<Hook>(`/api/hooks/${namespace}/${name}`, { method: 'GET' }, khookBaseUrl)
+      const response = await this.request<Hook>(`/api/v1/hooks/${namespace}/${name}`, { method: 'GET' }, khookBaseUrl)
       return response
     } catch (error) {
       throw new Error(`Network error: ${error}`)
@@ -1118,7 +1120,7 @@ export class KagentAPI {
     try {
       // Simplified approach - always use absolute URL for khook API
       const khookBaseUrl = 'http://localhost:8082'
-      const response = await this.request<Hook>('/api/hooks', {
+      const response = await this.request<Hook>('/api/v1/hooks', {
         method: 'POST',
         body: JSON.stringify(hook)
       }, khookBaseUrl)
@@ -1132,7 +1134,7 @@ export class KagentAPI {
     try {
       // Simplified approach - always use absolute URL for khook API
       const khookBaseUrl = 'http://localhost:8082'
-      const response = await this.request<Hook>(`/api/hooks/${namespace}/${name}`, {
+      const response = await this.request<Hook>(`/api/v1/hooks/${namespace}/${name}`, {
         method: 'PUT',
         body: JSON.stringify(hook)
       }, khookBaseUrl)
@@ -1146,7 +1148,7 @@ export class KagentAPI {
     try {
       // Simplified approach - always use absolute URL for khook API
       const khookBaseUrl = 'http://localhost:8082'
-      await this.request(`/api/hooks/${namespace}/${name}`, { method: 'DELETE' }, khookBaseUrl)
+      await this.request(`/api/v1/hooks/${namespace}/${name}`, { method: 'DELETE' }, khookBaseUrl)
     } catch (error) {
       throw new Error(`Network error: ${error}`)
     }

@@ -58,6 +58,7 @@ function App() {
   const [currentSession, setCurrentSession] = useState<KagentSession | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isSendingMessage, setIsSendingMessage] = useState(false)
+  const [isStartingChat, setIsStartingChat] = useState(false)
   
   // Chat history management - store chat sessions for each agent
   const [agentChatSessions, setAgentChatSessions] = useState<{
@@ -446,28 +447,96 @@ function App() {
       addDebugInfo(`Starting standalone chat with agent: ${agent.name}`)
       setSelectedAgent(agent)
       
-      const sessionName = `Standalone Chat with ${agent.name} - ${new Date().toLocaleString()}`
-      const session = await currentConnectorAPI.createSessionWithName(agent.name, sessionName)
-      setCurrentSession(session)
+      // Check if we already have a chat session for this agent
+      const existingSession = agentChatSessions[agent.name]
       
-      const messages = await currentConnectorAPI.getSessionMessages(session.id)
-      setChatMessages(messages)
-      
-      // If we have an initial message, send it immediately
-      if (initialMessage) {
-        try {
-          await currentConnectorAPI.sendMessage(session.id, initialMessage)
-          // Refresh messages to show the initial message
-          const updatedMessages = await currentConnectorAPI.getSessionMessages(session.id)
-          setChatMessages(updatedMessages)
-          addDebugInfo(`📤 Sent initial alert context message`)
-        } catch (error) {
-          console.error('Failed to send initial message:', error)
-          addDebugInfo(`❌ Failed to send initial message: ${error}`)
+      if (existingSession) {
+        // Restore existing session
+        addDebugInfo(`🔄 Restoring existing chat session for ${agent.name}`)
+        setCurrentSession(existingSession.session)
+        setChatMessages(existingSession.messages)
+        addDebugInfo(`✅ Restored chat session with ${existingSession.messages.length} messages`)
+        
+        // If we have an initial message, send it immediately
+        if (initialMessage) {
+          try {
+            await currentConnectorAPI.sendMessage(existingSession.session.id, initialMessage)
+            // Add the message to the UI immediately without waiting for API refresh
+            const userMessage = {
+              id: Date.now().toString(),
+              role: 'user' as const,
+              content: initialMessage,
+              timestamp: new Date().toISOString(),
+              sessionId: existingSession.session.id
+            }
+            const updatedMessages = [...existingSession.messages, userMessage]
+            setChatMessages(updatedMessages)
+            
+            // Update the cached session with new messages
+            setAgentChatSessions(prev => ({
+              ...prev,
+              [agent.name]: {
+                ...prev[agent.name],
+                messages: updatedMessages,
+                lastActive: new Date().toISOString()
+              }
+            }))
+            
+            addDebugInfo(`📤 Sent initial alert context message to existing session`)
+          } catch (error) {
+            console.error('Failed to send initial message to existing session:', error)
+            addDebugInfo(`❌ Failed to send initial message to existing session: ${error}`)
+          }
         }
+      } else {
+        // Create new session
+        const sessionName = `Standalone Chat with ${agent.name} - ${new Date().toLocaleString()}`
+        addDebugInfo(`Creating new session: ${sessionName}`)
+        
+        const session = await currentConnectorAPI.createSessionWithName(agent.name, sessionName)
+        setCurrentSession(session)
+        
+        const messages = await currentConnectorAPI.getSessionMessages(session.id)
+        setChatMessages(messages)
+        
+        // Cache the new session
+        setAgentChatSessions(prev => ({
+          ...prev,
+          [agent.name]: {
+            session: session,
+            messages: messages,
+            lastActive: new Date().toISOString()
+          }
+        }))
+        
+        // If we have an initial message, send it immediately
+        if (initialMessage) {
+          try {
+            await currentConnectorAPI.sendMessage(session.id, initialMessage)
+            // Refresh messages to show the initial message
+            const updatedMessages = await currentConnectorAPI.getSessionMessages(session.id)
+            setChatMessages(updatedMessages)
+            
+            // Update the cached session with new messages
+            setAgentChatSessions(prev => ({
+              ...prev,
+              [agent.name]: {
+                ...prev[agent.name],
+                messages: updatedMessages,
+                lastActive: new Date().toISOString()
+              }
+            }))
+            
+            addDebugInfo(`📤 Sent initial alert context message`)
+          } catch (error) {
+            console.error('Failed to send initial message:', error)
+            addDebugInfo(`❌ Failed to send initial message: ${error}`)
+          }
+        }
+        
+        addDebugInfo(`✅ Standalone chat session created: ${session.id}`)
       }
       
-      addDebugInfo(`✅ Standalone chat session created: ${session.id}`)
       setActiveTab('chat')
     } catch (error) {
       console.error('Failed to start standalone chat:', error)
@@ -484,6 +553,9 @@ function App() {
       addDebugInfo('❌ No active connector available')
       return
     }
+
+    // Set loading state
+    setIsStartingChat(true)
 
     // Find agent by ID across all connectors
     console.log('🔍 Available agents:', allAgents.map(a => ({ id: a.id, name: a.name })))
@@ -550,6 +622,9 @@ Please analyze this alert and provide recommendations for resolution. The alert 
     } catch (error) {
       console.error('Failed to start chat with agent from alert:', error)
       addDebugInfo(`❌ Failed to start chat with agent from alert: ${error}`)
+    } finally {
+      // Clear loading state
+      setIsStartingChat(false)
     }
   }
 
@@ -1029,6 +1104,7 @@ Please analyze this alert and provide recommendations for resolution. The alert 
                   <AlertDashboard 
                     kagentApi={currentConnectorAPI} 
                     onStartChatWithAgent={startChatWithAgentById}
+                    isStartingChat={isStartingChat}
                   />
                 </div>
               )

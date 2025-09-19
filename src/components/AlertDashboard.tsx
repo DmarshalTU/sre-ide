@@ -22,9 +22,10 @@ import {
 interface AlertDashboardProps {
   kagentApi: KagentAPI
   onStartChatWithAgent?: (agentId: string, alert?: Alert) => void
+  isStartingChat?: boolean
 }
 
-export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: AlertDashboardProps) {
+export default function AlertDashboard({ kagentApi, onStartChatWithAgent, isStartingChat = false }: AlertDashboardProps) {
   
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [summary, setSummary] = useState<AlertSummary | null>(null)
@@ -666,18 +667,29 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
                     {alert.agentId && (
                       <button
                         onClick={() => handleStartChatWithAgent(alert.agentId, alert)}
+                        disabled={isStartingChat}
                         className="btn btn-ghost"
                         style={{ 
                           fontSize: '0.75rem', 
                           padding: 'var(--spacing-xs) var(--spacing-sm)',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 'var(--spacing-xs)'
+                          gap: 'var(--spacing-xs)',
+                          opacity: isStartingChat ? 0.6 : 1,
+                          cursor: isStartingChat ? 'not-allowed' : 'pointer'
                         }}
-                        title={`Start chat with ${formatAgentId(alert.agentId)}`}
+                        title={isStartingChat ? 'Starting chat...' : `Start chat with ${formatAgentId(alert.agentId)}`}
                       >
-                        <MessageSquare style={{ width: '0.75rem', height: '0.75rem' }} />
-                        Chat
+                        {isStartingChat ? (
+                          <RefreshCw style={{ 
+                            width: '0.75rem', 
+                            height: '0.75rem',
+                            animation: 'spin 1s linear infinite'
+                          }} />
+                        ) : (
+                          <MessageSquare style={{ width: '0.75rem', height: '0.75rem' }} />
+                        )}
+                        {isStartingChat ? 'Starting...' : 'Chat'}
                       </button>
                     )}
                   </div>
@@ -703,19 +715,21 @@ export default function AlertDashboard({ kagentApi, onStartChatWithAgent }: Aler
                     Agent: 
                     <button
                       onClick={() => handleStartChatWithAgent(alert.agentId, alert)}
+                      disabled={isStartingChat}
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: 'var(--color-primary)',
-                        textDecoration: 'underline',
-                        cursor: 'pointer',
+                        color: isStartingChat ? 'var(--color-text-muted)' : 'var(--color-primary)',
+                        textDecoration: isStartingChat ? 'none' : 'underline',
+                        cursor: isStartingChat ? 'not-allowed' : 'pointer',
                         marginLeft: 'var(--spacing-xs)',
                         fontSize: '0.75rem',
-                        fontFamily: 'inherit'
+                        fontFamily: 'inherit',
+                        opacity: isStartingChat ? 0.6 : 1
                       }}
-                      title={`Click to chat with ${formatAgentId(alert.agentId)}`}
+                      title={isStartingChat ? 'Starting chat...' : `Click to chat with ${formatAgentId(alert.agentId)}`}
                     >
-                      {formatAgentId(alert.agentId)}
+                      {isStartingChat ? 'Starting...' : formatAgentId(alert.agentId)}
                     </button>
                   </span>
                   {alert.sessionId && <span>Session: {alert.sessionId.slice(0, 8)}...</span>}

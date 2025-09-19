@@ -356,7 +356,7 @@ export default function HookManager({ kagentApi }: HookManagerProps) {
                         color: 'var(--color-text-muted)',
                         marginLeft: 'auto'
                       }}>
-                        {formatAgentId(config.agentId)}
+                        {formatAgentId(config.agentRef.name)}
                       </span>
                     </div>
                   ))}
@@ -451,7 +451,7 @@ function CreateEditHookDialog({ hook, kagentApi, onClose, onSuccess }: CreateEdi
     eventConfigurations: hook?.spec.eventConfigurations || [
       {
         eventType: 'pod-restart' as const,
-        agentId: '',
+        agentRef: { name: '' },
         prompt: ''
       }
     ]
@@ -466,7 +466,7 @@ function CreateEditHookDialog({ hook, kagentApi, onClose, onSuccess }: CreateEdi
         ...prev.eventConfigurations,
         {
           eventType: 'pod-restart' as const,
-          agentId: '',
+          agentRef: { name: '' },
           prompt: ''
         }
       ]
@@ -480,7 +480,7 @@ function CreateEditHookDialog({ hook, kagentApi, onClose, onSuccess }: CreateEdi
     }))
   }
 
-  const updateEventConfiguration = (index: number, field: keyof EventConfiguration, value: string) => {
+  const updateEventConfiguration = (index: number, field: keyof EventConfiguration, value: any) => {
     setFormData(prev => ({
       ...prev,
       eventConfigurations: prev.eventConfigurations.map((config, i) => 
@@ -688,8 +688,8 @@ function CreateEditHookDialog({ hook, kagentApi, onClose, onSuccess }: CreateEdi
                       </label>
                       <input
                         type="text"
-                        value={config.agentId}
-                        onChange={(e) => updateEventConfiguration(index, 'agentId', e.target.value)}
+                        value={config.agentRef.name}
+                        onChange={(e) => updateEventConfiguration(index, 'agentRef', { name: e.target.value })}
                         className="input"
                         placeholder="incident-responder"
                         required
